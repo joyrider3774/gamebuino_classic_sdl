@@ -1,6 +1,21 @@
 #ifndef MENU_H
 #define MENU_H
 
+// A real, previously-latent header-hygiene bug, found via a real macOS/
+// Clang build failure ("unknown type name 'bool'"): this header uses
+// `bool` below without including <stdbool.h> itself, instead silently
+// relying on whichever caller happens to #include it doing so first (in
+// practice, machineDependent.h, transitively) - worked by accident under
+// MinGW/Linux GCC's own laxer handling here, since every real caller of
+// this header so far also happens to include machineDependent.h
+// somewhere in the same translation unit, but menu.c's own real include
+// order puts machineDependent.h AFTER menu.h, so that transitive
+// availability was never actually guaranteed - Clang correctly rejected
+// it. Every header should include what it directly uses, not rely on
+// inclusion order - fixed here rather than reordering any caller's own
+// #include list.
+#include <stdbool.h>
+
 // Game-select menu. Ported from the sibling gamebuino_classic_vircon32
 // build's own menu.c/menu.h (itself modeled on the tinyjoypad_vircon32/
 // Tinyjoypad_SDL projects' own identical-shaped menu) - draws with the real
