@@ -133,6 +133,20 @@ void gamesMain_dispatchFrame()
             md_armInputAGate();
             if( confirmSelection == 1 )
             {
+                // md_stopTone() alone only clears the one-shot voice pool
+                // (gbPlayTick()/OK()/Cancel()) - the tracker engine's own
+                // per-channel state (gbTrackIsPlaying[]/gbPatternIsPlaying[]/
+                // gbNotePlaying[]/gbActiveVoice[]) isn't reset by it at all,
+                // so a game quit mid-track (e.g. 101Starships' own
+                // continuous background music) would otherwise leave that
+                // state dangling - harmless once a fresh game's own
+                // gbBegin() resets it, but real, audible silence is the
+                // whole point of quitting to the menu, not "silent until
+                // the next launch happens to reset it." gbStopTrackAll()
+                // cascades down through gbStopPattern()/gbStopNoteChannel(),
+                // which also calls md_trackerVoiceStop() on every active
+                // tracker voice.
+                gbStopTrackAll();
                 md_stopTone();
                 currentGameIndex = -1;
                 menu_init();
