@@ -6,50 +6,41 @@ on:
 name: Build
 jobs:
   build:
-    name: Build ${{matrix.name}}-${{matrix.runson}}_${{ matrix.env }}${{ matrix.required && '' || ' (optional)' }}
-    # `required` doesn't gate whether the job RUNS - every matrix entry
-    # always runs - it only gates whether a failure actually fails the
-    # workflow (continue-on-error below). Modeled directly on the sibling
-    # Tinyjoypad_SDL project's own build.yml matrix (same runson/sys/env/
-    # SDL shape, same per-runsontype step structure), which has no
-    # `required` field of its own - added here on direct request: one
-    # canonical, most-representative combo per OS family (plus the one
-    # real Playdate device build) is required to pass; every other
-    # variant (32-bit, older OS releases, ARM runners, the extra macOS
-    # version/arch spread) is real coverage worth keeping but not worth
-    # blocking on, since they're all building the exact same source
-    # against a different compiler/libc/arch, not exercising different
-    # code paths. 
+    name: Build ${{matrix.name}}-${{matrix.runson}}_${{ matrix.env }}
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - { runson: 'windows-latest',   runsontype: 'windows', sys: 'mingw64', env: 'x86_64', name: 'GamebuinoClassicSDL2', binsuffix: '.exe', SDL: 'sdl2', required: true }
-          - { runson: 'windows-latest',   runsontype: 'windows', sys: 'mingw32', env: 'i686',   name: 'GamebuinoClassicSDL2', binsuffix: '.exe', SDL: 'sdl2', required: false }
-          - { runson: 'ubuntu-24.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: true }
-          - { runson: 'ubuntu-22.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: false }
-          - { runson: 'ubuntu-24.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: false }
-          - { runson: 'ubuntu-22.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: false }
-          - { runson: 'macos-14',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: true }
-          - { runson: 'macos-15',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: false }
-          - { runson: 'macos-26',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: false }
-          - { runson: 'macos-15-intel',   runsontype: 'mac',     sys: 'usr',     env: 'x86_64', name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: false }
-          - { runson: 'macos-26-intel',   runsontype: 'mac',     sys: 'usr',     env: 'x86_64', name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2', required: false }
-          - { runson: 'windows-latest',   runsontype: 'windows', sys: 'mingw64', env: 'x86_64', name: 'GamebuinoClassicSDL3', binsuffix: '.exe', SDL: 'sdl3', required: true }
-          - { runson: 'windows-latest',   runsontype: 'windows', sys: 'mingw32', env: 'i686',   name: 'GamebuinoClassicSDL3', binsuffix: '.exe', SDL: 'sdl3', required: false }
-          - { runson: 'ubuntu-24.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: true }
-          - { runson: 'ubuntu-22.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: false }
-          - { runson: 'ubuntu-24.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: false }
-          - { runson: 'ubuntu-22.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: false }
-          - { runson: 'macos-14',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: true }
-          - { runson: 'macos-15',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: false }
-          - { runson: 'macos-26',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: false }
-          - { runson: 'macos-15-intel',   runsontype: 'mac',     sys: 'usr',     env: 'x86_64', name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: false }
-          - { runson: 'macos-26-intel',   runsontype: 'mac',     sys: 'usr',     env: 'x86_64', name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3', required: false }
-          - { runson: 'ubuntu-24.04',     runsontype: 'playdate',sys: 'usr',     env: 'device', name: 'GamebuinoClassicPlaydate', binsuffix: '.pdx', SDL: 'playdate', required: true }
+          - { runson: 'windows-latest',   runsontype: 'windows', sys: 'mingw64', env: 'x86_64', name: 'GamebuinoClassicSDL2', binsuffix: '.exe', SDL: 'sdl2'}
+          - { runson: 'windows-latest',   runsontype: 'windows', sys: 'mingw32', env: 'i686',   name: 'GamebuinoClassicSDL2', binsuffix: '.exe', SDL: 'sdl2'}
+          - { runson: 'ubuntu-24.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'ubuntu-22.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          #- { runson: 'ubuntu-26.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          #- { runson: 'ubuntu-26.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'ubuntu-24.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'ubuntu-22.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'macos-14',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'macos-15',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'macos-26',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'macos-15-intel',   runsontype: 'mac',     sys: 'usr',     env: 'x86_64', name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'macos-26-intel',   runsontype: 'mac',     sys: 'usr',     env: 'x86_64', name: 'GamebuinoClassicSDL2', binsuffix: '',     SDL: 'sdl2'}
+          - { runson: 'windows-latest',   runsontype: 'windows', sys: 'mingw64', env: 'x86_64', name: 'GamebuinoClassicSDL3', binsuffix: '.exe', SDL: 'sdl3'}
+          - { runson: 'windows-latest',   runsontype: 'windows', sys: 'mingw32', env: 'i686',   name: 'GamebuinoClassicSDL3', binsuffix: '.exe', SDL: 'sdl3'}
+          - { runson: 'ubuntu-24.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'ubuntu-22.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          #- { runson: 'ubuntu-26.04',     runsontype: 'linux',   sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          #- { runson: 'ubuntu-26.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'ubuntu-24.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'ubuntu-22.04-arm', runsontype: 'linux',   sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'macos-14',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'macos-15',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'macos-26',         runsontype: 'mac',     sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'macos-15-intel',   runsontype: 'mac',     sys: 'usr',     env: 'x86_64', name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'macos-26-intel',   runsontype: 'mac',     sys: 'usr',     env: 'x86_64', name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          #- { runson: 'ubuntu-24.04',     runsontype: 'appimage',sys: 'usr',     env: 'x64',    name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          #- { runson: 'ubuntu-24.04-arm', runsontype: 'appimage',sys: 'usr',     env: 'arm64',  name: 'GamebuinoClassicSDL3', binsuffix: '',     SDL: 'sdl3'}
+          - { runson: 'ubuntu-24.04',     runsontype: 'playdate',sys: 'usr',     env: 'device', name: 'GamebuinoClassicPlaydate', binsuffix: '.pdx', SDL: 'playdate'}
 
     runs-on: ${{matrix.runson}}
-    continue-on-error: ${{ !matrix.required }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v7
@@ -72,7 +63,7 @@ jobs:
             mingw-w64-${{matrix.env}}-cmake
             mingw-w64-${{matrix.env}}-ninja
 
-      - if: ${{ matrix.runsontype == 'linux' }}
+      - if: ${{ matrix.runsontype == 'linux' || matrix.runsontype == 'appimage' }}
         name: install libsdl 2/3 dependencies
         run: |
           sudo apt update
@@ -108,8 +99,8 @@ jobs:
           cd build
           cmake -G "Ninja" -DUSE_VENDORED_SDL=1 ..
           ninja
-
-      - if: ${{ matrix.runsontype != 'windows' && matrix.runsontype != 'playdate'}}
+          
+      - if: ${{ matrix.runsontype != 'windows' && matrix.runsontype != 'appimage' && matrix.runsontype != 'playdate'}}
         name: Build Game Other
         run: |
           cd src/${{matrix.SDL}}
@@ -128,6 +119,14 @@ jobs:
           cd build_device
           cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$PLAYDATE_SDK_PATH/C_API/buildsupport/arm.cmake ..
           make
+
+      - if: ${{ matrix.runsontype == 'appimage'}}
+        name: Build Game Appimage
+        run: |
+          cd ./src/sdl3
+          chmod +x ./build-appimage.sh
+          ./build-appimage.sh
+      
 
       - if: ${{ matrix.runsontype == 'mac'}}
         name: Copy Game And Assets Mac
@@ -189,8 +188,8 @@ jobs:
         name: Ad Hoc Code sign Appl Bundle (Mac)
         run: |
           codesign --force --deep -s - "./Release/${{matrix.name}}.app"
-
-      - if: ${{ matrix.runsontype != 'mac' && matrix.runsontype != 'playdate'}}
+          
+      - if: ${{ matrix.runsontype != 'mac' && matrix.runsontype != 'appimage' && matrix.runsontype != 'playdate'}}
         name: Copy Game And Assets Other
         run: |
           mkdir ./Release
@@ -199,7 +198,7 @@ jobs:
           cp ./README.md "./Release/${{matrix.name}}/"
           cp ./LICENSE.txt "./Release/${{matrix.name}}/"
 
-      - if: ${{ matrix.runsontype != 'mac' && matrix.runsontype != 'playdate'}}
+      - if: ${{ matrix.runsontype != 'mac' && matrix.runsontype != 'appimage' && matrix.runsontype != 'playdate'}}
         run: |
           cp -r "metadata/gbu" "./Release/${{matrix.name}}/"
           cp -r "metadata/screenshots" "./Release/${{matrix.name}}/"
@@ -217,11 +216,11 @@ jobs:
           mkdir ./Release
           # .pdx is a directory bundle (like a macOS .app), not a single
           # file - cp needs -r or this silently fails to copy anything.
-          cp -r "src/playdate/build_device/GamebuinoClassic_DEVICE.pdx" "./Release/GamebuinoClassic.pdx"
+          cp -r "src/playdate/GamebuinoClassic_DEVICE.pdx" "./Release/GamebuinoClassic.pdx"
           cp ./README.md "./Release/"
           cp ./LICENSE.txt "./Release/"
 
-      - if: ${{ matrix.runsontype != 'playdate'}}
+      - if: ${{ matrix.runsontype != 'appimage' && matrix.runsontype != 'playdate'}}
         name: Store build
         uses: actions/upload-artifact@v7
         with:
@@ -234,3 +233,10 @@ jobs:
         with:
           name: Gamebuino Classic Playdate
           path: ./Release/
+
+      - if: ${{ matrix.runsontype == 'appimage'}}
+        name: Store build (appimage)
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{matrix.name}}-${{matrix.runsontype}}_${{ matrix.env }}
+          path: ./src/sdl3/dist/
