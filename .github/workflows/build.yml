@@ -19,7 +19,7 @@ jobs:
     # version/arch spread) is real coverage worth keeping but not worth
     # blocking on, since they're all building the exact same source
     # against a different compiler/libc/arch, not exercising different
-    # code paths.
+    # code paths. 
     strategy:
       fail-fast: false
       matrix:
