@@ -1,0 +1,4 @@
+theme: jekyll-theme-midnight
+exclude: 
+    - SDL2
+    - SDL3
