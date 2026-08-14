@@ -1,0 +1,6 @@
+name=Gamebuino Classic
+author=Joyrider3774
+description=99 Gamebuino Classic games behind one shared menu
+bundleID=com.gamebuinoclassic.playdate
+version=1.0
+buildNumber=1
