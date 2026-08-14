@@ -135,20 +135,13 @@
 //   established "blocking call -> explicit resumable state" precedent
 //   without a second real `gbBegin()` call.
 //
-// SOUND: real upstream drives a genuine low-level synthesis table via 4
-// `gb.sound.command(...)` calls per effect (volume/waveform/volume-slide/
-// pitch-slide) before a final `gb.sound.playNote(pitch, duration, channel)`
-// (see real `sfx()`/`soundfx[8][8]`) - this shim has no pattern/track/
-// low-level-synthesis player (an already-established, accepted scope limit
-// across every game in this project). Approximated exactly like
-// gameArtillery.c's/gameCopter.c's own identically-shaped soundfx tables:
-// `bbbSfx(fxno)` calls `gbPlayNote(bbbSoundFx[fxno][1], bbbSoundFx[fxno][7])`
-// directly - real upstream's own `soundfx[fxno][1]`/`[7]` are exactly the
-// pitch/duration fields real `playNote()` itself reads, so this reuses the
-// two fields that already carry real musical meaning and drops only the
-// per-channel volume/waveform/slide shaping this shim can't represent (the
-// `channel` argument is also dropped, matching this shim's own established
-// single-approximated-tone convention).
+// SOUND: a direct, byte-for-byte port of real upstream's own `sfx(fxno,
+// channel)`/`soundfx[8][8]` - `bbbSfx(fxno, channel)` issues the same 4
+// `gbSoundCommand()` calls (volume/instrument/slide/arpeggio) against the
+// same `bbbSoundFx[fxno][]` fields, in the same order, before a final
+// `gbPlayNoteChannel(pitch, duration, channel)` - every one of upstream's
+// own 11 real call sites was restored with its own real, literal channel
+// argument (0-3) rather than always defaulting to channel 0.
 //
 // EEPROM: real upstream's own single-byte save (`byte LevelsUnlock`) is
 // read once in `setup()` via a bare `EEPROM.read(EEPROM_SAVE_START+0)` -
@@ -1014,12 +1007,12 @@ int* bbbGetMapsPreviews[13]=
 };
 
 // -----------------------------------------------------------------------------
-//   Sound - one-shot-tone approximation (see this file's own header comment)
+//   Sound - real tracker soundfx table (see this file's own header comment)
 // -----------------------------------------------------------------------------
 
 // {waveform, pitch, pitchSlideTarget, pmt, vmt, volSlide, volume, length} -
-// only fields [1] (pitch) and [7] (length) are actually read by bbbSfx()
-// below; the rest is real upstream synthesis data this shim can't use.
+// a direct, byte-for-byte port of real upstream's own `const int
+// soundfx[8][8]` - every field is now used by bbbSfx() below.
 int bbbSoundFx[8][8]=
 {
     { 1, 27, 90, 2, 7, 7, 3, 7 },  // 0: jump
@@ -1032,9 +1025,17 @@ int bbbSoundFx[8][8]=
     { 0, 30, 55, 1, 7, 0, 7, 15 }, // 7: death
 };
 
-void bbbSfx( int fxno )
+// Direct port of real upstream's own `void sfx(int fxno, int channel)` -
+// the same 4 gbSoundCommand() calls (volume/waveform/volume-slide/pitch-
+// slide) plus a final gbPlayNoteChannel(), in the same order, against the
+// same fields.
+void bbbSfx( int fxno, int channel )
 {
-    gbPlayNote( bbbSoundFx[ fxno ][ 1 ], bbbSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, bbbSoundFx[ fxno ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, bbbSoundFx[ fxno ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, bbbSoundFx[ fxno ][ 5 ], -bbbSoundFx[ fxno ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, bbbSoundFx[ fxno ][ 3 ], bbbSoundFx[ fxno ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( bbbSoundFx[ fxno ][ 1 ], bbbSoundFx[ fxno ][ 7 ], channel );
 }
 
 // -----------------------------------------------------------------------------
@@ -1299,7 +1300,7 @@ int bbbPixelInCollider( int pimx, int pimy, int picx, int picy )
             {
                 if( !bbbKeyGot[a] )
                 {
-                    bbbSfx( 4 );
+                    bbbSfx( 4, 1 );
                     bbbKeysGot++;
                     bbbKeyGot[a] = true;
                     break;
@@ -1318,7 +1319,7 @@ int bbbPixelInCollider( int pimx, int pimy, int picx, int picy )
                 {
                     if( bbbLockerGot[a] == false )
                     {
-                        bbbSfx( 2 );
+                        bbbSfx( 2, 1 );
                         bbbLockerGot[a] = true;
                         bbbKeysGot--;
                         break;
@@ -1352,13 +1353,13 @@ int bbbPixelInCollider( int pimx, int pimy, int picx, int picy )
         x1 = 2; y1 = 5; x2 = 7; y2 = 7;
         if( 7 - picx >= x1 && 7 - picx <= x2 && 7 - picy >= y1 && 7 - picy <= y2 )
         {
-            bbbSfx( 7 );
+            bbbSfx( 7, 1 );
             bbbDie();
         }
     }
     else if( collType == 11 )
     {
-        bbbSfx( 5 );
+        bbbSfx( 5, 2 );
         bbbUnlockNext();
     }
     else if( collType == 12 )
@@ -1775,7 +1776,7 @@ void bbbUpdatePlaying()
     // true (GroundedDown was just reset to false immediately above), so the
     // "land" sound never fires, matching real upstream exactly.
     if( bbbLast == false && bbbGroundedDown == true )
-        bbbSfx( 3 );
+        bbbSfx( 3, 3 );
     bbbLast = bbbGroundedDown;
 
     if( !( gbTimeHeld( BTN_RIGHT ) > 0 ) && !( gbTimeHeld( BTN_LEFT ) > 0 ) )
@@ -1805,7 +1806,7 @@ void bbbUpdatePlaying()
 
     if( gbPressed( BTN_A ) && bbbGroundedDown )
     {
-        bbbSfx( 0 );
+        bbbSfx( 0, 0 );
         bbbVelocityY = 66;
     }
 
@@ -1813,14 +1814,14 @@ void bbbUpdatePlaying()
     {
         bbbVelocityX = 60;
         bbbVelocityY = 56;
-        bbbSfx( 1 );
+        bbbSfx( 1, 0 );
     }
 
     if( gbPressed( BTN_A ) && bbbGroundedLeft && !bbbGroundedDown )
     {
         bbbVelocityX = -60;
         bbbVelocityY = 56;
-        bbbSfx( 1 );
+        bbbSfx( 1, 0 );
     }
 
     if( gbPressed( BTN_C ) )
@@ -1883,7 +1884,7 @@ void bbbUpdatePlaying()
         if( bbbInRange( bbbEnnemies[c].posX - 8, (int)( -bbbPPosX ) ) &&
             bbbInRange( bbbEnnemies[c].posY - 8, (int)( -bbbPPosY ) ) )
         {
-            bbbSfx( 7 );
+            bbbSfx( 7, 1 );
             bbbDie();
         }
     }
@@ -1996,7 +1997,7 @@ void bbbUpdateSelect()
         gbDrawBitmap( 0, 20, bbbEArrow2 );
         if( gbPressed( BTN_LEFT ) )
         {
-            bbbSfx( 6 );
+            bbbSfx( 6, 2 );
             bbbMapCursor--;
         }
     }
@@ -2005,7 +2006,7 @@ void bbbUpdateSelect()
         gbDrawBitmap( 76, 20, bbbEArrow1 );
         if( gbPressed( BTN_RIGHT ) )
         {
-            bbbSfx( 6 );
+            bbbSfx( 6, 2 );
             bbbMapCursor++;
         }
     }

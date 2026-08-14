@@ -182,18 +182,21 @@
 // default" policy rather than silently fixed or silently ignored.
 //
 // ---- Sound ----
-// `playsoundfx(fxno, channel)` upstream ignores its own `channel` argument
-// as far as this shim is concerned (`gbPlayNote(pitch, duration)` has no
-// per-channel addressing - see gamebuinoShim.h's own header comment: the
-// effects/tracker part of real Sound.h is out of scope for this project's
-// first pass, the same established simplification gameAsterocks.c/
-// gameKillrace.c/gameInvaders.c already use for this same author's other
-// games). `paqSoundFx[8][8]` is kept as a verbatim copy of upstream's own
-// `soundfx[8][8]` table for fidelity, but `paqPlaySoundFx(fx)` only ever
-// reads column 1 (pitch) and column 7 (duration). Upstream's own direct
-// (non-playsoundfx) calls - `gb.sound.playTick()` in handledeath(),
-// `gb.sound.playOK()` on the title/game-over A/B presses - became
-// `gbPlayTick()`/`gbPlayOK()` directly, unchanged.
+// `playsoundfx(fxno, channel)` upstream builds a small per-channel
+// FX-synth preset each call (waveform/instrument, volume slide, pitch/
+// arpeggio slide `gb.sound.command(...)` calls, from the real
+// `soundfx[8][8]` table) before playing one real note on top -
+// `paqPlaySoundFx(fx, channel)` is a real, faithful port of this using
+// this shim's own `gbSoundCommand()`/`gbPlayNoteChannel()` primitives (a
+// direct port of real Sound.h's own per-channel tracker commands, the
+// same established primitive gameAsterocks.c/gameKillrace.c/
+// gameInvaders.c already use for this same author's other games).
+// `paqSoundFx[8][8]` is a verbatim copy of upstream's own `soundfx[8][8]`
+// table, and all 7 real `playsoundfx()` call sites now pass the same real
+// channel number upstream itself uses at that exact site (0 or 1).
+// Upstream's own direct (non-playsoundfx) calls - `gb.sound.playTick()` in
+// handledeath(), `gb.sound.playOK()` on the title/game-over A/B presses -
+// became `gbPlayTick()`/`gbPlayOK()` directly, unchanged.
 //
 // ---- Bitmaps - restored as real gbDrawBitmap() calls, not placeholders
 // ----
@@ -610,8 +613,7 @@ int paqMazeBitmap[1091] =
     0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
 };
 
-// Real "FX Synth" preset table (sounds.ino), copied verbatim - only
-// column 1 (pitch) and column 7 (duration) are actually read - see header.
+// Real "FX Synth" preset table (sounds.ino), copied verbatim - see header.
 int paqSoundFx[8][8] =
 {
     { 0, 30, 59, 1, 7, 0, 2, 5 },   // 0 = background sound 1 - channel 0
@@ -634,9 +636,13 @@ int paqB( bool cond )
     return 0;
 }
 
-void paqPlaySoundFx( int fx )
+void paqPlaySoundFx( int fx, int channel )
 {
-    gbPlayNote( paqSoundFx[ fx ][ 1 ], paqSoundFx[ fx ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, paqSoundFx[ fx ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, paqSoundFx[ fx ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, paqSoundFx[ fx ][ 5 ], -paqSoundFx[ fx ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, paqSoundFx[ fx ][ 3 ], paqSoundFx[ fx ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( paqSoundFx[ fx ][ 1 ], paqSoundFx[ fx ][ 7 ], channel );
 }
 
 // -----------------------------------------------------------------------
@@ -774,7 +780,7 @@ void paqDrawFruit()
             // fruit eaten
             paqFruitVisible = 0;
             paqScore = paqScore + 100 * paqGameLevel;
-            paqPlaySoundFx( 6 ); // fruit eaten sound
+            paqPlaySoundFx( 6, 1 ); // fruit eaten sound
         }
     }
 }
@@ -857,8 +863,8 @@ void paqPaqmanFullTile()
         if( cval == 1 )
         {
             paqDotsToEat = paqDotsToEat - 1;
-            if( paqDotsToEat % 2 == 0 ) paqPlaySoundFx( 3 );
-            else paqPlaySoundFx( 4 );
+            if( paqDotsToEat % 2 == 0 ) paqPlaySoundFx( 3, 1 );
+            else paqPlaySoundFx( 4, 1 );
             paqLevelDots[ cbyte ] = paqLevelDots[ cbyte ] - ( 1 << cbit );
 
             if( ( paqmanX == 1 || paqmanX == 26 ) && ( paqmanY == 4 || paqmanY == 24 ) )
@@ -1049,12 +1055,12 @@ void paqCheckGhostCollision()
                 paqScore = paqScore + paqGhostScore;
                 paqGhostScore = paqGhostScore * 2;
                 paqGhostStatus[ i ] = 1;
-                paqPlaySoundFx( 5 ); // ghost eaten sound
+                paqPlaySoundFx( 5, 1 ); // ghost eaten sound
             }
             else // paqman eaten
             {
                 paqDeadTimer = 70;
-                paqPlaySoundFx( 7 );
+                paqPlaySoundFx( 7, 1 );
             }
         }
     }
@@ -1066,13 +1072,13 @@ void paqHandlePowerPillTimer()
     if( paqPowerPillTimer > 0 )
     {
         paqPowerPillTimer = paqPowerPillTimer - 1;
-        if( paqBackgroundTimer == 0 && paqDeadTimer == -1 && paqWaitTime == 0 && paqYeahTimer == 0 ) paqPlaySoundFx( 2 );
+        if( paqBackgroundTimer == 0 && paqDeadTimer == -1 && paqWaitTime == 0 && paqYeahTimer == 0 ) paqPlaySoundFx( 2, 0 );
     }
     else
     {
         if( paqBackgroundTimer == 0 && paqDeadTimer == -1 && paqWaitTime == 0 && paqYeahTimer == 0 )
         {
-            paqPlaySoundFx( paqBackgroundSound );
+            paqPlaySoundFx( paqBackgroundSound, 0 );
             paqBackgroundSound = ( paqBackgroundSound + 1 ) % 2;
         }
     }

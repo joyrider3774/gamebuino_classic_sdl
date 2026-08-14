@@ -79,22 +79,55 @@
 // `param3` parameters (every real call site passes `0xff`/`false`, and
 // the function's own body never reads either one) were dropped too.
 //
-// SOUND - approximated, real scope limit (see this project's own
-// CLAUDE.md "Open questions"): real upstream plays 3 short real tracker
-// PATTERNS (`gb.sound.playTrack()` against `trackPush`/`trackCantMove`/
-// `trackCongrat`, each a real multi-note sequence), not simple one-shot
-// tones - this shim only ports one-shot representative tones, not the
-// real pattern/track player (matching gameStarships101.c's own identical
-// real scope limit and its own established substitution convention).
-// `trackPush` (played on every real "key" acknowledgement: successful
-// level-select navigation, a genuine undo, a level restart) is
-// approximated with `gbPlayTick()`; `trackCantMove` (a real negative/
-// blocked cue) with `gbPlayCancel()`; `trackCongrat` (a real ascending
-// 11-note win fanfare) with `gbPlayOK()` - matching gameStarships101.c's
-// own precedent of `gbPlayOK()`/`gbPlayCancel()` for a real win/lose
-// jingle substitute. `SOKOBAN_SOUND_MOVE`/`_PUSH` play no sound at all
-// upstream either (an empty real `switch` case) - ported as no call at
-// all, not a silent substitute.
+// SOUND - a real, direct port via this shim's own tracker/pattern engine
+// (gbPlayPattern()), with one deliberate, documented normalization of a
+// confirmed real upstream bug (not a literal call-site translation).
+//
+// Real upstream calls `gb.sound.playTrack(trackPush/trackCantMove/
+// trackCongrat, 0)` from `TriggerFx()` - but `changePatternSet()` is
+// never called anywhere in the real source (confirmed by grep across the
+// whole file). Real `Sound::updateTrack()` reads a track word's low byte
+// as a pattern ID and looks it up through `patternSet[channel][patternID]`
+// - with `patternSet[0]` never assigned, this is a genuinely uninitialized
+// pointer-of-pointers on real hardware, so the actual "pattern" ever
+// played is whatever raw AVR flash bytes happen to sit near address
+// `patternID*2` (real hardware's own `pgm_read_word()` reads flash
+// unconditionally, with no bounds check) - deterministic only for one
+// exact compiled `.hex`, not a real composed melody, and not something
+// this port could or should try to reproduce (this platform's own ROM
+// layout shares nothing with AVR flash, and even if it did, the result
+// would be meaningless noise unrelated to what the array's own data
+// actually encodes). On this platform the equivalent call would be an
+// outright NULL-pointer-array crash (`gbPatternSet[0]` is NULL until a
+// real `gbChangePatternSet()` call sets it, which upstream never makes
+// either) - a genuine, confirmed crash risk on every single push/undo/
+// win event, not just a cosmetic difference.
+//
+// Decoding `trackPush`/`trackCantMove`/`trackCongrat`'s own literal words
+// directly as real PATTERN data instead (bit-for-bit via `Sound::
+// updatePattern()`'s own note-word layout: 2-bit command flag, 6-bit
+// pitch, 8-bit duration) - the one interpretation their own real
+// `0x0000` terminator already matches (a real track needs `0xFFFF`) -
+// produces exactly the kind of small, coherent SFX their own names
+// describe: `trackPush` is a no-op instrument-select word (`0x0015`,
+// decodes to an out-of-range/no-op command, harmless) followed by one
+// short (1-frame) note at pitch 0; `trackCantMove` is the same no-op
+// header followed by two short descending notes (pitch 1, then pitch 0);
+// `trackCongrat` is the same no-op header followed by a real ascending
+// 10-note run (pitches 0,1,2,2,3,3,8,12,16,20, one real display frame
+// each). This is almost certainly upstream's own genuine bug - calling
+// `playTrack()` when `playPattern()` was meant (both take an identical
+// `(array, channel)` signature, an easy mixup) - so this port calls
+// `gbPlayPattern()` directly on the verbatim-copied data instead of
+// literally reproducing the broken `playTrack()`/unconfigured-
+// `patternSet` call chain, matching this file's own established
+// "REAL UPSTREAM BUG FOUND AND NORMALIZED" precedent further up this
+// comment (the `vram[]` overflow) for a real, non-reproducible AVR
+// artifact rather than a deliberate gameplay mechanic.
+//
+// `SOKOBAN_SOUND_MOVE`/`_PUSH` play no sound at all upstream either (an
+// empty real `switch` case) - ported as no call at all, not a silent
+// substitute.
 //
 // EEPROM: a real, genuine EEPROM consumer - `eeprom_read_byte()`/
 // `eeprom_write_byte()` port upstream's own real `EEPROM.read()`/
@@ -821,17 +854,31 @@ int sokoUndoRingbufferCount;
 int sokoTextPosX1, sokoTextPosY1, sokoTextPosX2, sokoTextPosY2, sokoTextPosX, sokoTextPosY;
 int sokoVram[SOKO_TILES_H * SOKO_TILES_V];
 
-// Plays one representative one-shot tone approximating real upstream's
-// own tracker PATTERN for this event - see this file's own "SOUND" header
-// comment for why (this shim has no real pattern/track player).
+// Real upstream `trackPush[]`/`trackCantMove[]`/`trackCongrat[]`
+// (sokobuino.ino), copied verbatim (byte-for-byte identical hex values,
+// verified against each array's own declared element count: 3/4/12
+// words, all real `0x0000`-terminated). See this file's own "SOUND"
+// header comment for why these are played via `gbPlayPattern()` rather
+// than the real, literal `gb.sound.playTrack()` upstream itself calls -
+// a deliberate normalization of a confirmed real upstream bug, not a
+// literal call-site translation.
+int sokoTrackPush[3] = { 0x0015, 0x0102, 0x0000 };
+int sokoTrackCantMove[4] = { 0x0015, 0x0104, 0x0102, 0x0000 };
+int sokoTrackCongrat[12] = { 0x0015, 0x0102, 0x0104, 0x0108, 0x010A, 0x010C, 0x010E, 0x0120, 0x0130, 0x0140, 0x0150, 0x0000 };
+
+// Plays one of the three real patterns above for this event - see this
+// file's own "SOUND" header comment for the full reasoning. Neither
+// pattern is ever preceded upstream by a real `changeInstrumentSet()`/
+// `command(CMD_INSTRUMENT,...)` call, so all three correctly play
+// through channel 0's own real default square-wave instrument.
 void sokoTriggerFx( int soundId )
 {
     if( soundId == SOKO_SOUND_KEY )
-      gbPlayTick();
+      gbPlayPattern( sokoTrackPush, 0 );
     else if( soundId == SOKO_SOUND_CANT_MOVE )
-      gbPlayCancel();
+      gbPlayPattern( sokoTrackCantMove, 0 );
     else if( soundId == SOKO_SOUND_CONGRAT )
-      gbPlayOK();
+      gbPlayPattern( sokoTrackCongrat, 0 );
     // SOKO_SOUND_MOVE / SOKO_SOUND_PUSH: no sound, matching upstream's
     // own empty switch cases.
 }

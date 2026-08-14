@@ -162,23 +162,26 @@
 // ever running" behavior).
 //
 // -----------------------------------------------------------------------
-// SOUND: real upstream uses the tracker/pattern player, out of this
-// project's current scope
+// SOUND: a real, direct port - patternA/patternB now play for real
 // -----------------------------------------------------------------------
-// Real upstream calls `gb.sound.playPattern(patternA/B, 0)` (two tiny
-// real note patterns, `playSoundA()`/`playSoundB()`) - this project's own
-// CLAUDE.md documents the real Sound track/pattern player as an open,
-// not-yet-ported subsystem (only one-shot representative tones exist:
-// `gbPlayNote`/`gbPlayTick`/`gbPlayOK`/`gbPlayCancel`). `soliPlaySoundA()`
+// Real upstream calls `gb.sound.playPattern(patternA/B, 0)` from
+// `playSoundA()`/`playSoundB()` - two tiny real note patterns (3 words
+// each, `const uint16_t patternA[]/patternB[] PROGMEM`), now ported
+// verbatim as `soliPatternA`/`soliPatternB` (byte-for-byte identical hex
+// values, real `0x0000` terminator preserved) and played for real via
+// `gbPlayPattern()` - the real tracker/pattern engine this shim now
+// implements (see gamebuinoShim.h's own Sound section header comment).
+// Neither pattern is preceded upstream by a `changeInstrumentSet()`/
+// `command(CMD_INSTRUMENT,...)` call, so both correctly play through
+// channel 0's own real default square-wave instrument, matching real
+// hardware exactly - no approximation needed anymore. `soliPlaySoundA()`
 // (real call sites: drawing/dealing a card, triggering a fast-foundation
-// auto-move) substitutes `gbPlayTick()` - a light, frequent "minor action"
-// click, matching how often real `playSoundA()` fires. `soliPlaySoundB()`
-// (real call sites: attempting to place a held pile - fires on every
-// attempt, legal or not, not specifically an error cue - and the win-
-// animation's own bounce-off-the-bottom impact) substitutes `gbPlayOK()`
-// - a slightly more affirmative click for a "committing" action. Neither
-// upstream pattern encodes a real melody worth trying to approximate more
-// precisely than this.
+// auto-move) and `soliPlaySoundB()` (real call sites: attempting to place
+// a held pile - fires on every attempt, legal or not, not specifically an
+// error cue - and the win-animation's own bounce-off-the-bottom impact)
+// are otherwise unchanged - same call sites, same real upstream trigger
+// conditions, just genuine pattern playback instead of a one-shot-tone
+// stand-in now that the shim supports it.
 //
 // -----------------------------------------------------------------------
 // EEPROM: a full, real port (statistics AND save-for-later), not a stub
@@ -319,7 +322,7 @@
 // exists in `gamebuinoShim.h`/`eepromShim.h`
 // (gbDrawBitmap/gbDrawPixel/gbDrawFastHLine/gbDrawFastVLine/gbDrawRect/
 // gbFillRect/gbSetColor/gbCursorX/gbCursorY/gbPrintString/gbPrintNumber/
-// gbPressed/gbRepeat/gbFrameCount/gbPlayTick/gbPlayOK/gbMin/gbMax/
+// gbPressed/gbRepeat/gbFrameCount/gbPlayPattern/gbMin/gbMax/
 // eeprom_read_byte/eeprom_write_byte/eeprom_update_byte/
 // eeprom_read_word/eeprom_write_word) - nothing new was added.
 
@@ -756,17 +759,26 @@ SoliPile* soliGetPileByLocation( int loc )
 }
 
 // -----------------------------------------------------------------------
-// Sound (see this file's own header comment on the real substitution made)
+// Sound (see this file's own header comment - a real, direct port now,
+// not a one-shot-tone substitution)
 // -----------------------------------------------------------------------
+
+// Real upstream `patternA[]`/`patternB[]` (solitaire.ino), copied
+// byte-for-byte (3 words each, real `0x0000`-terminated). Neither ever
+// gets its own `changeInstrumentSet()`/`command(CMD_INSTRUMENT,...)` call
+// upstream, so both play through channel 0's real default square-wave
+// instrument.
+int soliPatternA[3] = { 0x0045, 0x0118, 0x0000 };
+int soliPatternB[3] = { 0x0045, 0x0108, 0x0000 };
 
 void soliPlaySoundA()
 {
-    gbPlayTick();
+    gbPlayPattern( soliPatternA, 0 );
 }
 
 void soliPlaySoundB()
 {
-    gbPlayOK();
+    gbPlayPattern( soliPatternB, 0 );
 }
 
 // -----------------------------------------------------------------------

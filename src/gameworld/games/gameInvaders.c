@@ -193,15 +193,16 @@
 //
 // SOUND: `soundfx[8][8]` copied verbatim into `invSoundFx` (matching
 // gameSimonbuino.c's own `simonSoundFx[5][8]` precedent for a 2D sound-
-// parameter table). Real `playsoundfx(fxno, channel)` drove a small
-// hand-rolled tracker effect per call (`gb.sound.command(...)` for
-// waveform/volume-slide/pitch-slide, then a `playNote()`) - this shim has
-// no tracker/pattern engine at all (see gamebuinoShim.h's own header
-// comment), so `invPlaySfx()` only forwards the pitch/duration pair
-// (`invSoundFx[fxno][1]`/`[7]`) to `gbPlayNote()`; the channel parameter
-// is kept (for exact call-site parity with upstream) but unused, and the
-// waveform/slide shaping is dropped outright, matching gameFlappyBirdo.c's
-// own `flapPlaySfx()` precedent for the exact same simplification.
+// parameter table; all 8 rows/8 columns re-verified byte-for-byte against
+// sounds.ino). Real `playsoundfx(fxno, channel)` builds a small per-channel
+// FX-synth preset each call (`gb.sound.command(...)` for waveform/
+// instrument, volume slide, pitch/arpeggio slide, then `playNote()`) -
+// `invPlaySfx()` is now a real, faithful port of this via this shim's own
+// `gbSoundCommand()`/`gbPlayNoteChannel()` primitives (a direct port of
+// real Sound.h's own per-channel tracker commands). All 6 real
+// `playsoundfx()` call sites already passed the same real channel number
+// upstream itself uses at that exact site (0/1/2), so no call site needed
+// to change.
 //
 // The digit-count cursor-offset formula upstream uses twice (`14-2*
 // (score>9)-2*(score>99)-2*(score>999)`, relying on C++'s own implicit
@@ -345,9 +346,8 @@ int invBmpBomb1[6]= { 2, 4, 64, 128, 64, 128 };
 int invBmpSaucer0[10]= { 11, 4, 31, 0, 106, 192, 255, 224, 100, 192 };
 int invBmpSaucer1[10]= { 11, 4, 93, 192, 85, 64, 85, 64, 93, 192 };
 
-// Real soundfx[8][8] table, copied verbatim (see this file's own header
-// comment - only fields [1] (pitch) and [7] (duration) of each row are
-// actually used by invPlaySfx() below).
+// Real soundfx[8][8] table, copied verbatim - see this file's own header
+// comment.
 int invSoundFx[8][8]= {
     { 1, 57, 57, 1, 1, 1, 5, 6 },  // 0 = shoot
     { 0, 0, 68, 1, 0, 0, 7, 4 },   // 1 = invader hit
@@ -373,8 +373,11 @@ int invDigitCount( int n )
 
 void invPlaySfx( int fxno, int channel )
 {
-    channel = channel; // unused - this shim's gbPlayNote() has no channel parameter
-    gbPlayNote( invSoundFx[ fxno ][ 1 ], invSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, invSoundFx[ fxno ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, invSoundFx[ fxno ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, invSoundFx[ fxno ][ 5 ], -invSoundFx[ fxno ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, invSoundFx[ fxno ][ 3 ], invSoundFx[ fxno ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( invSoundFx[ fxno ][ 1 ], invSoundFx[ fxno ][ 7 ], channel );
 }
 
 void invDrawInvaderBitmap( int x, int y, int idx )

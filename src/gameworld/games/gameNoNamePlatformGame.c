@@ -49,16 +49,12 @@
 // `gameNoNamePlatformGame_init()`, never again from the title state or
 // from a Button-C press mid-game.
 //
-// SOUND: `outpt_soundfx()` configures a waveform + volume-slide + pitch-
-// slide via real `gb.sound.command(...)` before calling `playNote()` -
-// this shim only ports the one-shot `playNote()`/`playTick()`/`playOK()`/
-// `playCancel()` tones (see gamebuinoShim.h's own documented scope; the
-// full pattern/track/command() player is out of scope project-wide, not
-// specific to this game - matching gameArtillery.c's/gameBomber.c's own
-// identical situation). `nnpgPlaySoundFx()` calls `gbPlayNote()` directly
-// with `nnpgSoundTable[][]`'s own real pitch (column 1) and duration
-// (column 7) fields, producing a plain tone at the right pitch without
-// the real slide effects.
+// SOUND: `nnpgPlaySoundFx()` is a direct, byte-for-byte port of real
+// upstream's own `outpt_soundfx(byte fxno)` - the same 4
+// `gbSoundCommand()` calls (volume/instrument/slide/arpeggio, always
+// channel 0, matching upstream's own hardcoded `0` argument throughout)
+// plus a final `gbPlayNoteChannel()`, against the existing
+// `nnpgSoundTable[][]` table.
 //
 // DROPPED, NO EQUIVALENT: `gb.battery.show = false;` (a real-hardware-
 // only battery-icon display setting, matching this project's own
@@ -143,9 +139,16 @@ int nnpgWalking;
 int nnpgDir;
 int nnpgEyes;
 
+// Direct port of real upstream's own `void outpt_soundfx(byte fxno)` -
+// always channel 0, matching every one of that function's own real
+// gb.sound.command()/playNote() calls exactly.
 void nnpgPlaySoundFx( int fxno )
 {
-    gbPlayNote( nnpgSoundTable[ fxno ][ 1 ], nnpgSoundTable[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, nnpgSoundTable[ fxno ][ 6 ], 0, 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, nnpgSoundTable[ fxno ][ 0 ], 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, nnpgSoundTable[ fxno ][ 5 ], -nnpgSoundTable[ fxno ][ 4 ], 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, nnpgSoundTable[ fxno ][ 3 ], nnpgSoundTable[ fxno ][ 2 ] - 58, 0 );
+    gbPlayNoteChannel( nnpgSoundTable[ fxno ][ 1 ], nnpgSoundTable[ fxno ][ 7 ], 0 );
 }
 
 // Direct port of real `fnctn_initPlayer()`.

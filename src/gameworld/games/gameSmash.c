@@ -197,18 +197,17 @@
 //      copied verbatim at each call site (`arand(34)` vs `6 + arand(28)`)
 //      rather than normalized to one range.
 //
-// Sound: `gb.sound.playNote(pitch,dur,channel)` ported as `gbPlayNote(
-// pitch,dur)` (channel dropped, matching this shim's single-channel
-// design). Every `gb.sound.command(...)` call (a real, raw low-level
-// Sound::command() tracker effect - e.g. a pitch slide/vibrato layered on
-// top of the note that was just played) was dropped outright: this is the
-// same already-documented, deliberate scope limit as the rest of the real
-// pattern/track player (`gamebuinoShim.h`'s own header comment - only
-// one-shot `playNote`/`playTick`/`playOK`/`playCancel` exist), not a new
-// gap. The 5 real upstream call sites that play an identical "player died"
-// note+command sequence (falling off the bottom, and each of the 4 hazard
-// types) were consolidated into one local `smashKillPlayer()` helper - a
-// plain de-duplication of literally identical code, not a behavior change.
+// Sound: `gb.sound.playNote(pitch,dur,channel)`/`gb.sound.command(...)`
+// ported via this shim's real `gbPlayNoteChannel()`/`gbSoundCommand()`
+// tracker/pattern primitives, restoring every real per-note effect
+// (waveform/pitch-slide) at its own real channel (0 for the jump tone,
+// 1 for both the running-boost tone and the death tone - matching
+// upstream's own literal channel arguments exactly). The 5 real upstream
+// call sites that play an identical "player died"
+// `playNote(1,28,1)`+`command(1,1,0,1)`+`command(2,7,-2,1)` sequence
+// (falling off the bottom, and each of the 4 hazard types) were
+// consolidated into one local `smashKillPlayer()` helper - a plain
+// de-duplication of literally identical code, not a behavior change.
 //
 // `gb.getCpuLoad()`/`gb.getFreeRam()` (the Status menu screen) and
 // `gb.battery.show` are real hardware-introspection features with no
@@ -359,7 +358,9 @@ char smashResumeText[12]= { 22, 32, 116, 111, 32, 114, 101, 115, 117, 109, 101, 
 
 void smashKillPlayer()
 {
-    gbPlayNote( 1, 28 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, 1, 0, 1 );
+    gbSoundCommand( GB_CMD_SLIDE, 7, -2, 1 );
+    gbPlayNoteChannel( 1, 28, 1 );
     smashAlive = false;
 }
 
@@ -664,19 +665,22 @@ void smashUpdatePlay()
         }
         if( gbRepeat( BTN_LEFT, 2 ) && ( smashPlayerX > 0 ) && gbRepeat( BTN_B, 1 ) )
         {
-            gbPlayNote( 6, 1 );
+            gbSoundCommand( GB_CMD_INSTRUMENT, 1, 0, 1 );
+            gbPlayNoteChannel( 6, 1, 1 );
             smashPlayerX = smashPlayerX - 3;
             smashPlayerFlip = 1;
         }
         if( gbRepeat( BTN_RIGHT, 2 ) && ( smashPlayerX < 76 ) && gbRepeat( BTN_B, 1 ) )
         {
-            gbPlayNote( 6, 1 );
+            gbSoundCommand( GB_CMD_INSTRUMENT, 1, 0, 1 );
+            gbPlayNoteChannel( 6, 1, 1 );
             smashPlayerX = smashPlayerX + 3;
             smashPlayerFlip = 0;
         }
         if( gbRepeat( BTN_A, 20 ) && smashPlayerJump )
         {
-            gbPlayNote( 30, 5 );
+            gbSoundCommand( GB_CMD_ARPEGGIO, 3, 1, 0 );
+            gbPlayNoteChannel( 30, 5, 0 );
             smashPlayerY = smashPlayerY - 1;
             smashPlayerGrav = -7;
         }

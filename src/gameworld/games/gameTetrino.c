@@ -176,11 +176,14 @@
 // Real sound (`playSoundFX()`'s own `soundfx[4][8]` "FX Synth" table,
 // credited upstream to a yodasvideoarcade.com generator tool - the same
 // table shape gameSnakeAbc.c/gameAsterocks.c/gameBlocksBuino.c already
-// ported) is copied verbatim; only columns 1 (pitch) and 7 (duration) are
-// actually used, matching this shim's own `gbPlayNote(pitch, duration)`
-// signature (real `Sound::command()`'s own waveform/volume-slide/
-// pitch-slide effect columns have no equivalent here - an already
-// documented, deliberate scope limit, not something missed).
+// ported) is copied verbatim, and `tetPlaySoundFX()` is a full, faithful
+// port of real `PlatformGB::playSoundFX(fxno, channel)` - every real
+// `gb.sound.command()`/`playNote()` call restored (instrument/volume-slide/
+// pitch-slide effect columns included, via `gbSoundCommand()`), on the same
+// two real channels upstream routes to (`TET_SND_CHANNEL_1`/`_2`, matching
+// real `SND_FX_CHANNEL_1`/`_2`), not just the pitch/duration approximation
+// an earlier pass here shipped before this shim had a real
+// `gbSoundCommand()`/`gbPlayNoteChannel()` primitive to call.
 
 #define TET_TILE_SIZE 3
 #define TET_BOARD_W 10
@@ -256,6 +259,9 @@
 #define TET_SND_GAME_OVER      2
 #define TET_SND_PIECE_DROP     3
 
+#define TET_SND_CHANNEL_1 0
+#define TET_SND_CHANNEL_2 1
+
 #define TET_STATE_TITLE 0
 #define TET_STATE_PLAY  1
 
@@ -306,9 +312,7 @@ int tetLogoBitmap[242]= {
 };
 
 // Real upstream "FX Synth" table (credited upstream to a yodasvideoarcade.com
-// generator tool), copied verbatim - only columns 1 (pitch) and 7 (duration)
-// are actually read by tetPlaySoundFX() below, matching this shim's own
-// gbPlayNote(pitch, duration) signature.
+// generator tool), copied verbatim - see this file's own header comment.
 int tetSoundFx[4][8]=
 {
     {0,45,26,1,0,1,7,10}, // 0: line completed
@@ -358,11 +362,16 @@ int tetRandomPieceType()
     return arand( TET_TETROMINO_TYPES );
 }
 
-// Direct port of real PlatformGB::playSoundFX() - only pitch/duration are
-// forwarded (see this file's own header comment on tetSoundFx).
-void tetPlaySoundFX( int fxno )
+// Direct port of real PlatformGB::playSoundFX(fxno, channel) - every real
+// gb.sound.command()/playNote() call restored verbatim (see this file's own
+// header comment on tetSoundFx and the real column layout).
+void tetPlaySoundFX( int fxno, int channel )
 {
-    gbPlayNote( tetSoundFx[fxno][1], tetSoundFx[fxno][7] );
+    gbSoundCommand( GB_CMD_VOLUME, tetSoundFx[fxno][6], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, tetSoundFx[fxno][0], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, tetSoundFx[fxno][5], -tetSoundFx[fxno][4], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, tetSoundFx[fxno][3], tetSoundFx[fxno][2] - 58, channel );
+    gbPlayNoteChannel( tetSoundFx[fxno][1], tetSoundFx[fxno][7], channel );
 }
 
 // Direct port of real Game::setTetromino(), specialized for the falling
@@ -579,7 +588,7 @@ void tetOnFilledRows( int filledRows )
         tetFallingDelay = ( TET_DELAY_FACTOR_FOR_LEVEL_UP * tetFallingDelay ) / TET_DELAY_DIVISOR_FOR_LEVEL_UP;
     }
 
-    tetPlaySoundFX( TET_SND_LINE_COMPLETED );
+    tetPlaySoundFX( TET_SND_LINE_COMPLETED, TET_SND_CHANNEL_2 );
 }
 
 // Direct port of real Game::moveTetromino().
@@ -721,7 +730,7 @@ void tetDropTetromino()
     tetMoveTetromino( 0, 1 ); // force lock
 
     tetScore = tetScore + ( TET_SCORE_2_FILLED_ROW * ( tetLevel + 1 ) ) / TET_SCORE_DROP_DIVISOR;
-    tetPlaySoundFX( TET_SND_PIECE_DROP );
+    tetPlaySoundFX( TET_SND_PIECE_DROP, TET_SND_CHANNEL_1 );
 }
 
 // Direct port of real Game::start().
@@ -854,7 +863,7 @@ void tetRenderPlay()
     {
         if( !tetPlayedGameOverSnd )
         {
-            tetPlaySoundFX( TET_SND_GAME_OVER );
+            tetPlaySoundFX( TET_SND_GAME_OVER, TET_SND_CHANNEL_1 );
             tetPlayedGameOverSnd = true;
         }
         gbSetColor( GB_WHITE );
@@ -894,7 +903,7 @@ void tetUpdatePlay()
     {
         tetEvents = tetEvents | TET_EVT_ROTATE_CW;
         if( !tetIsOver )
-          tetPlaySoundFX( TET_SND_ROTATE );
+          tetPlaySoundFX( TET_SND_ROTATE, TET_SND_CHANNEL_1 );
     }
 
     if( gbPressed( BTN_UP ) )

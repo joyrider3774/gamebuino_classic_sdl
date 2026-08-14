@@ -592,6 +592,12 @@ static bool  gToneActive[ AUDIO_MAX_VOICES ];
 static float gToneFreq[ AUDIO_MAX_VOICES ];
 static float gTonePhase[ AUDIO_MAX_VOICES ];
 static int   gToneStopFrame[ AUDIO_MAX_VOICES ];
+// Per-voice volume (0..1) - a one-shot md_playTone() voice always plays at
+// full volume (1.0), matching this backend's own original behavior before
+// this field existed; gamebuinoShim.c's own tracker engine (md_trackerVoice
+// Start()/Retune()) is what actually varies this, for a real note's own
+// volume-slide/tremolo/instrument-step dynamics.
+static float gToneVolume[ AUDIO_MAX_VOICES ];
 
 // Global mute (Button Y) - see machineDependent.h's own md_inputR() comment
 // for why this, unlike the real-gray-color toggle, stays entirely
@@ -635,7 +641,7 @@ static void SDLCALL sdlAudioCallback( void* userdata, Uint8* stream, int len )
                   continue;
 
                 mixed += (int)( ( gTonePhase[ v ] < (float)M_PI ? 1.0f : -1.0f )
-                    * AUDIO_AMPLITUDE * gVolume );
+                    * AUDIO_AMPLITUDE * gVolume * gToneVolume[ v ] );
 
                 gTonePhase[ v ] += 2.0f * (float)M_PI * gToneFreq[ v ] / (float)AUDIO_SAMPLE_RATE;
                 if( gTonePhase[ v ] >= 2.0f * (float)M_PI )
@@ -714,6 +720,7 @@ void md_playTone( float freqHz, float durationSeconds )
 
     gTonePhase[ slot ] = 0.0f;
     gToneFreq[ slot ] = freqHz;
+    gToneVolume[ slot ] = 1.0f;
     gToneActive[ slot ] = true;
 
     int durationFrames = (int)( durationSeconds * (float)MD_FRAMES_PER_SECOND );
@@ -740,6 +747,63 @@ void md_stopTone()
         gToneActive[ v ] = false;
         gToneStopFrame[ v ] = -1;
     }
+}
+
+// See machineDependent.h's own doc comment for the full rationale (a
+// continuously-retunable voice, for gamebuinoShim.c's own tracker/pattern
+// engine, distinct from md_playTone()'s own fixed-duration one-shot pool
+// above - though both share the same underlying AUDIO_MAX_VOICES bank).
+// A tracker voice never auto-expires by frame count (gToneStopFrame stays
+// -1, the same "not scheduled to auto-stop" sentinel md_stopTone() already
+// uses) - its lifetime is managed explicitly by gamebuinoShim.c's own
+// gbStopNoteChannel(), matching real hardware's own note-duration-driven
+// (not wall-clock-driven) lifetime exactly.
+int md_trackerVoiceStart( float freqHz, float volume )
+{
+    if( freqHz <= 0.0f )
+      return -1;
+
+    int slot = -1;
+    for( int v = 0; v < AUDIO_MAX_VOICES; v++ )
+    {
+        if( !gToneActive[ v ] )
+        {
+            slot = v;
+            break;
+        }
+    }
+    if( slot < 0 )
+      slot = 0; // all voices busy - steal the first one rather than silently dropping the note
+
+    gTonePhase[ slot ] = 0.0f;
+    gToneFreq[ slot ] = freqHz;
+    gToneVolume[ slot ] = volume;
+    gToneActive[ slot ] = true;
+    gToneStopFrame[ slot ] = -1;
+
+    return slot;
+}
+
+// Retunes an already-started tracker voice in place - no phase reset, no
+// click, matching real hardware's own continuously-updated oscillator
+// exactly: gTonePhase[] keeps advancing across the frequency change in the
+// audio callback, it's never touched here.
+void md_trackerVoiceRetune( int channel, float freqHz, float volume )
+{
+    if( channel < 0 || channel >= AUDIO_MAX_VOICES || freqHz <= 0.0f )
+      return;
+
+    gToneFreq[ channel ] = freqHz;
+    gToneVolume[ channel ] = volume;
+}
+
+void md_trackerVoiceStop( int channel )
+{
+    if( channel < 0 || channel >= AUDIO_MAX_VOICES )
+      return;
+
+    gToneActive[ channel ] = false;
+    gToneStopFrame[ channel ] = -1;
 }
 
 void md_updateAudio()

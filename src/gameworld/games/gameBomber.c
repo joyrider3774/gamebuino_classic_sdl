@@ -188,21 +188,15 @@
 // with a solid wall ring at exactly these coordinates), not new gameplay
 // behavior.
 //
-// SOUND - APPROXIMATED, DOCUMENTED (an already-established scope limit, not
-// a new shim gap): upstream's own `playsoundfx()` issues a real low-level
-// `gb.sound.command(CMD_VOLUME,...)/command(CMD_WAVE,...)/command(CMD_SLIDE,
-// ...)/command(CMD_ARPEGGIO,...)` sequence before every `gb.sound.playNote()`
-// call - a generic tracker-style command/arpeggio/instrument API this shim
-// has no equivalent for (only one-shot `gbPlayNote`/`gbPlayTick`/`gbPlayOK`/
-// `gbPlayCancel` exist), the same gap already documented in gameArmageddon.c.
-// `bombPlaySound()` below keeps upstream's own real per-effect pitch/
-// duration pair from its `soundfx[][8]` table (column 1 = pitch, column 7 =
-// duration - the two values `gbPlayNote(pitch,duration)` can actually
-// express) and calls `gbPlayNote()` directly with them, dropping only the
-// volume/waveform/slide columns this shim has no primitive for, matching
-// `gameArmageddon.c`'s own `armaPlaySound()` treatment exactly. The real
-// `channel` parameter (always 0 in every real call site) is dropped too,
-// since `gbPlayNote()` itself has no channel parameter.
+// SOUND: a direct, byte-for-byte port of upstream's own real
+// `playsoundfx(fxno,channel)` - `bombPlaySound()` calls the shim's own
+// real tracker-engine primitives (`gbSoundCommand()` for volume/
+// instrument/slide/arpeggio, `gbPlayNoteChannel()` for the note itself),
+// matching upstream's own exact call order/argument shape one-for-one.
+// `bombSoundFx[2][8]` is upstream's own real `soundfx[2][8]` table
+// verified byte-for-byte. Both real call sites (Bombe.ino's own
+// drop-bomb and explosion) are restored with upstream's own exact
+// fxno/channel arguments (channel always 0, matching upstream).
 //
 // Real bitmap art (`MiniBomber`/`MiniMonster`/`MiniExplode`/`MiniCoupe`/
 // `titleScreenImage`/`GameOverScreen`/`TableauScore`) is copied verbatim
@@ -441,16 +435,20 @@ int bombMazeData5[252] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 };
 
-// Real upstream `soundfx[2][8]` table - column 1 is note pitch, column 7 is
-// note duration (see this file's own header comment on sound approximation).
+// Real upstream `soundfx[2][8]` table, byte-for-byte (see this file's own
+// header comment on sound).
 int bombSoundFx[2][8] = {
-    { 1, 4, 113, 10, 7, 19, 7, 52 },
-    { 0, 19, 9, 1, 7, 15, 7, 4 },
+    { 1, 4, 113, 10, 7, 19, 7, 52 },  // Explosion
+    { 0, 19, 9, 1, 7, 15, 7, 4 },     // Drop bombe
 };
 
-void bombPlaySound( int fxno )
+void bombPlaySound( int fxno, int channel )
 {
-    gbPlayNote( bombSoundFx[ fxno ][ 1 ], bombSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, bombSoundFx[ fxno ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, bombSoundFx[ fxno ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, bombSoundFx[ fxno ][ 5 ], -bombSoundFx[ fxno ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, bombSoundFx[ fxno ][ 3 ], bombSoundFx[ fxno ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( bombSoundFx[ fxno ][ 1 ], bombSoundFx[ fxno ][ 7 ], channel );
 }
 
 // -----------------------------------------------------------------------------
@@ -600,7 +598,7 @@ void bombDropBombe( int x, int y, BombBombe* bombeArray )
             bombeArray[ cpt ].isAlive = true;
             bombeArray[ cpt ].x = x;
             bombeArray[ cpt ].y = y;
-            bombPlaySound( 1 );
+            bombPlaySound( 1, 0 );
             break;
         }
         cpt++;
@@ -637,7 +635,7 @@ void bombExplosionBombe( BombBombe* laBombe )
 {
     int decalageX, decalageY, tuileX, tuileY;
 
-    bombPlaySound( 0 );
+    bombPlaySound( 0, 0 );
     bombShakeMagnitude = 2;
     bombShakeTimeLeft = 3;
     laBombe->explose = true;

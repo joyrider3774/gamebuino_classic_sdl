@@ -104,16 +104,18 @@
 // was one; preserved with the exact same draw order upstream uses.
 //
 // Sound: upstream's own `playSound()` helper drives `gb.sound.command()`
-// four times per effect (volume, instrument, volume-slide, pitch-slide,
+// five times per effect (volume, instrument, volume-slide, pitch-slide,
 // tremolo) before a final `gb.sound.playNote(pitch, duration, channel)` -
-// this shim has no `command()`/slide/tremolo machinery, only one-shot
-// `gbPlayNote(pitch, duration)` (a documented, pre-existing scope limit, not
-// a new gap - see this project's own CLAUDE.md "Open questions"). Every one
-// of upstream's 9 real sound-effect tables (`sndWin`/`sndLose`/`sndFlip`/
-// `sndHold`/`sndBet1..5`/`sndResume`/`sndPause` in Sound.h) was collapsed to
-// a tiny `vpokerPlayXxx()` wrapper calling `gbPlayNote()` with that same
-// table's own real pitch/duration pair (indices 8/9) - the slide/tremolo
-// shaping is lost, the actual notes/durations are not.
+// `vpokerPlaySound()` is now a direct, faithful port of that same function,
+// via this shim's own `gbSoundCommand()`/`gbPlayNoteChannel()` primitives.
+// All 11 real sound-effect tables (`sndWin`/`sndLose`/`sndFlip`/`sndHold`/
+// `sndBet1..5`/`sndResume`/`sndPause` in Sound.h) are copied verbatim, all
+// 10 columns each (not just the pitch/duration pair an earlier pass here
+// kept before this shim had `gbSoundCommand()`), and every real call site
+// (including the Bet-Up/Bet-Down `switch` chains, each now passing the
+// exact same table upstream's own matching `case` does) routes through
+// `vpokerPlaySound()`/`vpokerPlayBet()` on channel 0, matching every real
+// upstream call site's own literal `channel=0` argument.
 //
 // `testHand(int hand)` - upstream's own real debug helper for jumping
 // straight to a specific hand result - has no live call site anywhere in
@@ -138,8 +140,9 @@
 //
 // No shim gaps were found while porting this game - every primitive used
 // here (`gbDrawBitmap`, `gbSetFont`/`gbPrintString`/`gbPrintNumber`,
-// `gbPressed`, `gbPlayNote`, `eeprom_read_byte`/`eeprom_write_byte`, `arand`)
-// already existed and worked as documented.
+// `gbPressed`, `gbSoundCommand`/`gbPlayNoteChannel`,
+// `eeprom_read_byte`/`eeprom_write_byte`, `arand`) already existed and
+// worked as documented.
 
 #define VPOKER_CARDY 14
 #define VPOKER_YHELD 37
@@ -322,21 +325,50 @@ enum VpokerState
 int vpokerState;
 
 // -----------------------------------------------------------------------------
-//   Sound - see this file's own header comment on why the slide/tremolo
-//   shaping from upstream's own playSound()/Sound.h is dropped, keeping just
-//   the real pitch/duration pair from each table.
+//   Sound - real Sound.h tables, copied verbatim (10 columns: volume,
+//   instrument, volume-slide duration/depth, pitch-slide duration/depth,
+//   tremolo duration/depth, pitch, duration), and vpokerPlaySound() is a
+//   direct, faithful port of real upstream's own playSound() - every real
+//   gb.sound.command() call (volume/instrument/volume-slide/pitch-slide/
+//   tremolo) restored via gbSoundCommand(), followed by the real final
+//   gbPlayNoteChannel(pitch, duration, channel) - not just the pitch/
+//   duration-only approximation an earlier pass here shipped before this
+//   shim had gbSoundCommand()/gbPlayNoteChannel(). Real upstream always
+//   passes channel 0 at every one of its own call sites.
 // -----------------------------------------------------------------------------
 
-void vpokerPlayWin()    { gbPlayNote( 16, 8 ); }
-void vpokerPlayLose()   { gbPlayNote( 6, 4 ); }
-void vpokerPlayFlip()   { gbPlayNote( 0, 2 ); }
-void vpokerPlayHold()   { gbPlayNote( 0, 4 ); }
-void vpokerPlayResume() { gbPlayNote( 60, 6 ); }
-void vpokerPlayPause()  { gbPlayNote( 55, 6 ); }
+int vpokerSndWin[10]    = { 9, 0, 0, 0,  3,  5, 0, 0, 16, 8 };
+int vpokerSndLose[10]   = { 9, 0, 0, 0,  2, -2, 0, 0,  6, 4 };
+int vpokerSndFlip[10]   = { 9, 0, 0, 0,  1,  2, 0, 0,  0, 2 };
+int vpokerSndHold[10]   = { 9, 0, 0, 0,  1,  2, 0, 0,  0, 4 };
+int vpokerSndBet1[10]   = { 9, 0, 0, 0,  1,  2, 0, 0,  6, 4 };
+int vpokerSndBet2[10]   = { 9, 0, 0, 0,  1,  2, 0, 0,  8, 4 };
+int vpokerSndBet3[10]   = { 9, 0, 0, 0,  1,  2, 0, 0, 10, 4 };
+int vpokerSndBet4[10]   = { 9, 0, 0, 0,  1,  2, 0, 0, 12, 4 };
+int vpokerSndBet5[10]   = { 9, 0, 0, 0,  1,  2, 0, 0, 14, 4 };
+int vpokerSndResume[10] = { 9, 0, 0, 0,  4, -5, 0, 0, 60, 6 };
+int vpokerSndPause[10]  = { 9, 0, 0, 0,  4,  5, 0, 0, 55, 6 };
 
-void vpokerPlayBet( int pitch )
+void vpokerPlaySound( int* snd, int channel )
 {
-    gbPlayNote( pitch, 4 );
+    gbSoundCommand( GB_CMD_VOLUME, snd[0], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, snd[1], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, snd[2], snd[3], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, snd[4], snd[5], channel );
+    gbSoundCommand( GB_CMD_TREMOLO, snd[6], snd[7], channel );
+    gbPlayNoteChannel( snd[8], snd[9], channel );
+}
+
+void vpokerPlayWin()    { vpokerPlaySound( vpokerSndWin, 0 ); }
+void vpokerPlayLose()   { vpokerPlaySound( vpokerSndLose, 0 ); }
+void vpokerPlayFlip()   { vpokerPlaySound( vpokerSndFlip, 0 ); }
+void vpokerPlayHold()   { vpokerPlaySound( vpokerSndHold, 0 ); }
+void vpokerPlayResume() { vpokerPlaySound( vpokerSndResume, 0 ); }
+void vpokerPlayPause()  { vpokerPlaySound( vpokerSndPause, 0 ); }
+
+void vpokerPlayBet( int* snd )
+{
+    vpokerPlaySound( snd, 0 );
 }
 
 // -----------------------------------------------------------------------------
@@ -846,31 +878,31 @@ void vpokerUpdateInput()
 
     if( ( vpokerRound == VPOKER_ROUND_BET ) && gbPressed( BTN_UP ) )
     {
-        if( vpokerBet == 5 ) { vpokerBet = 10; vpokerPlayBet( 8 ); }
-        else if( vpokerBet == 10 ) { vpokerBet = 25; vpokerPlayBet( 10 ); }
-        else if( vpokerBet == 25 ) { vpokerBet = 50; vpokerPlayBet( 12 ); }
-        else if( vpokerBet == 50 ) { vpokerBet = 100; vpokerPlayBet( 14 ); }
-        else if( vpokerBet == 100 ) { vpokerBet = 5; vpokerPlayBet( 6 ); }
+        if( vpokerBet == 5 ) { vpokerBet = 10; vpokerPlayBet( vpokerSndBet2 ); }
+        else if( vpokerBet == 10 ) { vpokerBet = 25; vpokerPlayBet( vpokerSndBet3 ); }
+        else if( vpokerBet == 25 ) { vpokerBet = 50; vpokerPlayBet( vpokerSndBet4 ); }
+        else if( vpokerBet == 50 ) { vpokerBet = 100; vpokerPlayBet( vpokerSndBet5 ); }
+        else if( vpokerBet == 100 ) { vpokerBet = 5; vpokerPlayBet( vpokerSndBet1 ); }
 
         if( vpokerBet > vpokerBank )
         {
             vpokerBet = 5;
-            vpokerPlayBet( 6 );
+            vpokerPlayBet( vpokerSndBet1 );
         }
     }
 
     if( ( vpokerRound == VPOKER_ROUND_BET ) && gbPressed( BTN_DOWN ) )
     {
-        if( vpokerBet == 5 ) { vpokerBet = 100; vpokerPlayBet( 14 ); }
-        else if( vpokerBet == 10 ) { vpokerBet = 5; vpokerPlayBet( 6 ); }
-        else if( vpokerBet == 25 ) { vpokerBet = 10; vpokerPlayBet( 8 ); }
-        else if( vpokerBet == 50 ) { vpokerBet = 25; vpokerPlayBet( 10 ); }
-        else if( vpokerBet == 100 ) { vpokerBet = 50; vpokerPlayBet( 12 ); }
+        if( vpokerBet == 5 ) { vpokerBet = 100; vpokerPlayBet( vpokerSndBet5 ); }
+        else if( vpokerBet == 10 ) { vpokerBet = 5; vpokerPlayBet( vpokerSndBet1 ); }
+        else if( vpokerBet == 25 ) { vpokerBet = 10; vpokerPlayBet( vpokerSndBet2 ); }
+        else if( vpokerBet == 50 ) { vpokerBet = 25; vpokerPlayBet( vpokerSndBet3 ); }
+        else if( vpokerBet == 100 ) { vpokerBet = 50; vpokerPlayBet( vpokerSndBet4 ); }
 
         if( vpokerBet > vpokerBank )
         {
             vpokerBet = 5;
-            vpokerPlayBet( 6 );
+            vpokerPlayBet( vpokerSndBet1 );
         }
     }
 

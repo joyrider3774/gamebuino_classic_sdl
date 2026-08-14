@@ -138,19 +138,20 @@
 // player had previously chosen - preserved here exactly since that really
 // is what pressing C does on real hardware, not a porting artifact.
 //
-// SOUND: upstream's own `playsoundfx()` drives a small hand-rolled
-// "FX Synth" tracker effect (per-call waveform/volume-slide/pitch-slide
-// `gb.sound.command(...)` calls) layered on top of a single `playNote()`
-// call - this shim has no tracker/pattern engine at all (see
-// gamebuinoShim.h's own header comment), so only the underlying
-// `playNote(pitch, duration)` call for each of upstream's five sound
-// effects (fly/point/death/win-melody/menu-bip) was kept, via a small
-// `flapPlaySfx()` wrapper; the waveform/slide shaping is dropped outright
-// (documented here, not silently). Upstream's own mute toggle
-// (`gb.sound.setVolume(sound_volume, 0)`, checked every tick) has no
-// direct equivalent (no `gbSetVolume()` in this shim) - reimplemented
-// instead by gating `flapPlaySfx()` itself on a `flapSoundOn` bool, which
-// the B button still toggles exactly like upstream's own `soundMute()`.
+// SOUND: a direct, byte-for-byte port of upstream's own real "FX Synth"
+// `soundfx[5][8]` table and its own real `playsoundfx(fxno,channel)` -
+// `flapPlaySfx()` calls the shim's own real tracker-engine primitives
+// (`gbSoundCommand()` for volume/instrument/slide/arpeggio,
+// `gbPlayNoteChannel()` for the note itself), matching upstream's own
+// exact call order/argument shape one-for-one. All 6 real call sites
+// (Player.ino's own fly/death, Score.ino's own +1 point, End.ino's own
+// win melody, Menu.ino's own two menu-bip presses) are restored with
+// upstream's own exact fxno/channel arguments (channel always 0,
+// matching upstream). Upstream's own mute toggle (`gb.sound.setVolume(
+// sound_volume, 0)`, checked every tick) has no direct equivalent (no
+// `gbSetVolume()` in this shim) - reimplemented instead by gating
+// `flapPlaySfx()` itself on a `flapSoundOn` bool, which the B button
+// still toggles exactly like upstream's own `soundMute()`.
 //
 // A GENUINE UPSTREAM BUG, FOUND, INITIALLY PRESERVED, THEN FIXED ON REQUEST:
 // upstream's own `difficulty_level` is declared `long` ("easy=0.5 <
@@ -265,20 +266,13 @@
 #define FLAP_PLAYERW 11
 #define FLAP_PLAYERH 10
 
-// pitch/duration pairs lifted straight out of upstream's own soundfx[][]
-// table (element [1] = note pitch, element [7] = duration) - see this
-// file's own header comment for why only these two fields of each entry
-// survived the port.
-#define FLAP_NOTE_FLY 0
-#define FLAP_DUR_FLY 3
-#define FLAP_NOTE_POINT 6
-#define FLAP_DUR_POINT 8
-#define FLAP_NOTE_DEATH 24
-#define FLAP_DUR_DEATH 7
-#define FLAP_NOTE_WIN 57
-#define FLAP_DUR_WIN 57
-#define FLAP_NOTE_MENUBIP 4
-#define FLAP_DUR_MENUBIP 1
+// Indices into flapSoundFx[5][8] below - upstream's own real soundfx[][]
+// row numbers, matching every real playsoundfx(fxno,...) call site.
+#define FLAP_SFX_FLY 0
+#define FLAP_SFX_POINT 1
+#define FLAP_SFX_DEATH 2
+#define FLAP_SFX_WIN 3
+#define FLAP_SFX_MENUBIP 4
 
 // upstream's own real GAMEOVERX/TROPHYX macros, `floor((LCDWIDTH-30)/2)` and
 // `floor((LCDWIDTH-22)/2)` respectively, evaluated ahead of time against the
@@ -417,13 +411,29 @@ int flapGameoverTimer = 0;
 FlapPipe flapPipes[3];
 
 // -----------------------------------------------------------------------------
-// Sound
+// Sound - upstream's own real soundfx[5][8] "FX Synth" table, byte-for-byte,
+// and a direct port of its own real playsoundfx(fxno,channel).
 // -----------------------------------------------------------------------------
 
-void flapPlaySfx( int pitch, int duration )
+int flapSoundFx[5][8] =
 {
-    if( flapSoundOn )
-      gbPlayNote( pitch, duration );
+    { 0, 0, 61, 1, 0, 0, 2, 3 },    // fly
+    { 0, 6, 107, 1, 5, 4, 3, 8 },   // +1 point
+    { 0, 24, 55, 1, 0, 0, 5, 7 },   // death
+    { 0, 57, 2, 1, 7, 19, 5, 57 },  // winning melody (max score reached)
+    { 0, 4, 37, 4, 7, 12, 3, 1 },   // menu bip
+};
+
+void flapPlaySfx( int fxno, int channel )
+{
+    if( !flapSoundOn )
+      return;
+
+    gbSoundCommand( GB_CMD_VOLUME, flapSoundFx[ fxno ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, flapSoundFx[ fxno ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, flapSoundFx[ fxno ][ 5 ], -flapSoundFx[ fxno ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, flapSoundFx[ fxno ][ 3 ], flapSoundFx[ fxno ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( flapSoundFx[ fxno ][ 1 ], flapSoundFx[ fxno ][ 7 ], channel );
 }
 
 // -----------------------------------------------------------------------------
@@ -454,7 +464,7 @@ void flapUpdateScore()
     if( flapScore + 1 <= FLAP_SCOREMAX )
     {
         flapScore = flapScore + 1;
-        flapPlaySfx( FLAP_NOTE_POINT, FLAP_DUR_POINT );
+        flapPlaySfx( FLAP_SFX_POINT, 0 );
     }
     else
       flapScore = FLAP_SCOREMAX;
@@ -707,7 +717,7 @@ void flapPlayerMove()
         {
             if( flapGravity > -0.5 )
               flapGravity = flapGravity - 2;
-            flapPlaySfx( FLAP_NOTE_FLY, FLAP_DUR_FLY );
+            flapPlaySfx( FLAP_SFX_FLY, 0 );
             flapPlayerAnim = 1;
         }
     }
@@ -728,7 +738,7 @@ void flapPlayerMove()
             || gbCollideBitmapBitmap( FLAP_PLAYERX, (int)flapPlayerY, flapBird1Bitmap, pipeX, pipeY, flapPipeBitmap )
             || gbCollideBitmapBitmap( FLAP_PLAYERX, (int)flapPlayerY, flapBird1Bitmap, pipeX, pipeY - FLAP_PIPEH - FLAP_PIPEGAPV, flapPipeBitmap ) )
         {
-            flapPlaySfx( FLAP_NOTE_DEATH, FLAP_DUR_DEATH );
+            flapPlaySfx( FLAP_SFX_DEATH, 0 );
             flapBeginGameover();
         }
     }
@@ -792,7 +802,7 @@ void flapUpdateGameover()
 void flapUpdateWin()
 {
     if( flapScoreMaxReached <= 1 )
-      flapPlaySfx( FLAP_NOTE_WIN, FLAP_DUR_WIN );
+      flapPlaySfx( FLAP_SFX_WIN, 0 );
     flapScoreMaxReached = flapScoreMaxReached + 1;
 
     if( flapScoreMaxReached > LCDHEIGHT )
@@ -844,13 +854,13 @@ void flapUpdateMenu()
     {
         flapDifficultyIndex = flapDifficultyIndex - 1;
         flapPlayerAnim = 1;
-        flapPlaySfx( FLAP_NOTE_MENUBIP, FLAP_DUR_MENUBIP );
+        flapPlaySfx( FLAP_SFX_MENUBIP, 0 );
     }
     if( gbPressed( BTN_DOWN ) )
     {
         flapDifficultyIndex = flapDifficultyIndex + 1;
         flapPlayerAnim = 1;
-        flapPlaySfx( FLAP_NOTE_MENUBIP, FLAP_DUR_MENUBIP );
+        flapPlaySfx( FLAP_SFX_MENUBIP, 0 );
     }
     if( flapDifficultyIndex < 0 ) flapDifficultyIndex = 2;
     if( flapDifficultyIndex > 2 ) flapDifficultyIndex = 0;

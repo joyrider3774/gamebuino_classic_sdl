@@ -27,26 +27,14 @@
 // this dialect has no classes/methods). `random(N)` became `arand(N)`.
 // `byte` became plain `int` (this dialect's own avrCompat.h aliasing).
 //
-// Two real simplifications remain beyond the usual mechanical rewrite (a
-// third, dropped bitmap art, was later restored once this shim grew a real
-// bitmap blitter - see the dedicated paragraph on that below the list):
+// One real simplification remains beyond the usual mechanical rewrite (a
+// second, dropped bitmap art, was later restored once this shim grew a real
+// bitmap blitter - see the dedicated paragraph on that below the list; a
+// third, the "FX Synth" `Sound::command()` effects, was later restored too
+// once this shim grew a real tracker/pattern sound engine - see
+// `simonPlaySoundFx()`'s own comment below):
 //
-// 1. **No Sound::command() effects.** Upstream's own `playsoundfx()` used
-//    `gb.sound.command(...)` to set a per-note waveform, volume-slide, and
-//    pitch-slide before calling `gb.sound.playNote(pitch, duration,
-//    channel)` (an "FX Synth" preset system) - this shim only implements a
-//    flat `gbPlayNote(pitch, duration)` (see gamebuinoShim.h's own header
-//    comment: the tracker/pattern/effects part of real Sound.h is out of
-//    scope for this project's first pass). Every `command()` call was
-//    dropped; the plain `playNote()` call itself is kept, using exactly the
-//    same pitch/duration values upstream's own `soundfx[][]` table already
-//    stored for it (`soundfx[fx][1]` = pitch, `soundfx[fx][7]` = duration -
-//    both already real Gamebuino pitch/tick values, not raw Hz, so no unit
-//    conversion was needed at all here, unlike a game that called `tone()`
-//    directly). The 4 direction tones and the fail tone all still play,
-//    just without their own slide/vibrato flavor.
-//
-// 2. **`gb.titleScreen()`'s own real blocking-call shape.** Upstream's own
+// 1. **`gb.titleScreen()`'s own real blocking-call shape.** Upstream's own
 //    `initGame()` opens with a blocking `gb.titleScreen(titleBitmap)` call,
 //    and only *after* that call returns (i.e. only once a real A-press
 //    dismisses it) does the rest of `initGame()` run: reseeding
@@ -224,10 +212,9 @@ int simonSmileyBitmap[34]=
 };
 
 // Sound FX table, copied verbatim from upstream's own "FX Synth" preset
-// data - only column 1 (pitch) and column 7 (duration) are actually used by
-// this port's own simonPlaySoundFx() (see this file's own header comment,
-// point 1, for why the other columns - waveform/pitch-slide/volume-slide -
-// are dropped rather than ported).
+// data - all 8 columns are used by simonPlaySoundFx() below, matching
+// upstream's own real playsoundfx() call-for-call via this shim's real
+// gbSoundCommand()/gbPlayNoteChannel() tracker/pattern primitives.
 int simonSoundFx[5][8]= {
     {0, 0, 0, 12, 3, 4, 5, 8},    // sound 1 = up
     {0, 12, 19, 8, 4, 4, 5, 6},   // sound 2 = right
@@ -355,9 +342,15 @@ void simonDrawButtons()
     gbPrintNumber( simonMelodyStep - 1 );
 }
 
+// Direct port of upstream's own playsoundfx(fxno, channel) - always
+// channel 0 here, matching every real call site in this game.
 void simonPlaySoundFx( int fx )
 {
-    gbPlayNote( simonSoundFx[ fx ][ 1 ], simonSoundFx[ fx ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, simonSoundFx[ fx ][ 6 ], 0, 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, simonSoundFx[ fx ][ 0 ], 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, simonSoundFx[ fx ][ 5 ], -simonSoundFx[ fx ][ 4 ], 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, simonSoundFx[ fx ][ 3 ], simonSoundFx[ fx ][ 2 ] - 58, 0 );
+    gbPlayNoteChannel( simonSoundFx[ fx ][ 1 ], simonSoundFx[ fx ][ 7 ], 0 );
 }
 
 void simonPlaySound()
@@ -484,7 +477,7 @@ void simonPlayerTurn()
 }
 
 // Runs once, on the exact A-press that dismisses the title screen - see
-// this file's own header comment, point 2, for why the melody reseed and
+// this file's own header comment, point 1, for why the melody reseed and
 // full variable reset both live here rather than in simonBeginTitle().
 void simonBeginPlay()
 {
@@ -538,7 +531,7 @@ void simonUpdatePlay()
 {
     // RESET KEY - matches upstream's own key_reset(): always sends the
     // player back to a fresh title screen (see this file's own header
-    // comment, point 2), never resets in place.
+    // comment, point 1), never resets in place.
     if( gbPressed( BTN_C ) )
     {
         simonBeginTitle();

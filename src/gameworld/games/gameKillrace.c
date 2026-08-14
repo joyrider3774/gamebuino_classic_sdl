@@ -185,22 +185,18 @@
 // so every gbDrawBitmap() call here is a single direct call, no
 // background-bleed risk to guard against.
 //
-// SOUND: upstream's own playsoundfx() drives a small per-effect
-// waveform/volume-slide/pitch-slide `gb.sound.command(...)` sequence
-// (from the real soundfx[5][8] table) layered on top of one
-// `gb.sound.playNote(pitch,duration,channel)` call - this shim has no
-// tracker/pattern engine at all (see gamebuinoShim.h's own header
-// comment), so only the underlying pitch (column 1) and duration
-// (column 7) of each of upstream's five effects survive, via
-// killPlaySfx(fxno) -> gbPlayNote(killSoundFx[fxno][1],
-// killSoundFx[fxno][7]) - the full real table is still kept verbatim
-// (killSoundFx[5][8]) for documentation/fidelity even though only two of
-// its eight columns are ever read, matching gameSimonbuino.c's/
-// gameSnakeAbc.c's own precedent for keeping a real soundfx[][] table
-// intact. The waveform/volume-slide/pitch-slide shaping itself is dropped
-// outright (documented here, not silently) - channel numbers (0 vs 1 in
-// upstream's own playsoundfx(fxno,channel) calls) are dropped too, this
-// shim having no concept of separate sound channels.
+// SOUND: upstream's own playsoundfx(fxno,channel) builds a small
+// per-channel FX-synth preset each call (waveform/instrument, volume
+// slide, pitch/arpeggio slide `gb.sound.command(...)` calls, from the
+// real soundfx[5][8] table) layered on top of one
+// `gb.sound.playNote(pitch,duration,channel)` call - killPlaySfx(fxno,
+// channel) is a real, faithful port of this using this shim's own
+// `gbSoundCommand()`/`gbPlayNoteChannel()` primitives (a direct port of
+// real Sound.h's own per-channel tracker commands). killSoundFx[5][8] is
+// a verbatim copy of upstream's own soundfx[5][8] table (re-verified
+// byte-for-byte against sounds.ino), and all 9 real playsoundfx() call
+// sites now pass the same real channel number upstream itself uses at
+// that exact site (0 or 1).
 //
 // FONT: upstream's own source never calls `gb.display.setFont(...)`
 // anywhere in any of its six .ino files (confirmed directly, not
@@ -251,8 +247,8 @@ enum KillState
 };
 
 // -----------------------------------------------------------------------------
-// Sound - real upstream soundfx[5][8] table, kept intact (see header
-// comment: only columns 1/7, pitch/duration, are actually read here).
+// Sound - real upstream soundfx[5][8] table, copied verbatim - see header
+// comment.
 // -----------------------------------------------------------------------------
 
 int killSoundFx[5][8]= {
@@ -263,9 +259,13 @@ int killSoundFx[5][8]= {
     { 0, 0, 19, 1, 1, 4, 7, 20 },  // 4 = next level (all men killed)
 };
 
-void killPlaySfx( int fxno )
+void killPlaySfx( int fxno, int channel )
 {
-    gbPlayNote( killSoundFx[ fxno ][ 1 ], killSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, killSoundFx[ fxno ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, killSoundFx[ fxno ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, killSoundFx[ fxno ][ 5 ], -killSoundFx[ fxno ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, killSoundFx[ fxno ][ 3 ], killSoundFx[ fxno ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( killSoundFx[ fxno ][ 1 ], killSoundFx[ fxno ][ 7 ], channel );
 }
 
 // -----------------------------------------------------------------------------
@@ -516,7 +516,7 @@ bool killCheckButtons()
     {
         if( killCarXr != -2 )
         {
-            killPlaySfx( 0 );
+            killPlaySfx( 0, 0 );
             changed = 1;
         }
         killCarXr = -2;
@@ -527,7 +527,7 @@ bool killCheckButtons()
     {
         if( killCarXr != 2 )
         {
-            killPlaySfx( 0 );
+            killPlaySfx( 0, 0 );
             changed = 1;
         }
         killCarXr = 2;
@@ -538,7 +538,7 @@ bool killCheckButtons()
     {
         if( killCarYr != -2 )
         {
-            killPlaySfx( 0 );
+            killPlaySfx( 0, 0 );
             changed = 1;
         }
         killCarXr = 0;
@@ -549,7 +549,7 @@ bool killCheckButtons()
     {
         if( killCarYr != 2 )
         {
-            killPlaySfx( 0 );
+            killPlaySfx( 0, 0 );
             changed = 1;
         }
         killCarXr = 0;
@@ -560,7 +560,7 @@ bool killCheckButtons()
     {
         if( killCarXr != 0 || killCarYr != 0 )
         {
-            killPlaySfx( 0 );
+            killPlaySfx( 0, 0 );
             killScore = killScore - 1;
             if( killScore < 0 ) killScore = 0;
         }
@@ -573,7 +573,7 @@ bool killCheckButtons()
         return true;
     }
     if( changed == 0 && killDeadCounter == -1 && killYeahTimer == 0 && ( killCarXr != 0 || killCarYr != 0 ) )
-      killPlaySfx( 1 );
+      killPlaySfx( 1, 0 );
 
     return false;
 }
@@ -751,7 +751,7 @@ void killCheckCollision()
 
                 if( colFlag == 1 )
                 {
-                    killPlaySfx( 3 );
+                    killPlaySfx( 3, 1 );
                     killDeadCounter = 50;
                     killManShape[ i ] = 10;
                 }
@@ -766,9 +766,9 @@ void killCheckCollision()
                     killMenKilled = killMenKilled + 1;
 
                     if( killMenKilled == killMenToKill )
-                      killPlaySfx( 4 );
+                      killPlaySfx( 4, 1 );
                     else
-                      killPlaySfx( 2 );
+                      killPlaySfx( 2, 1 );
                 }
             }
         }

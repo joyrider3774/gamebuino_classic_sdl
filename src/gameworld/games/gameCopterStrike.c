@@ -128,15 +128,20 @@
 //   - `gb.titleScreen(gamelogo)` (blocking, real-library) is hand-rolled as a
 //     title state drawing the same real logo bitmap, matching the treatment
 //     every other port in this project gives that call.
-//   - Sound: upstream's `gb.sound.command()` waveform/volume/slide setup has
-//     no equivalent here, so `outpt_soundfx()` collapses to this project's
-//     established one-shot-tone approximation - upstream's own literal
-//     `playNote(17, 3, 0)`. Real hardware has ONE sound channel, so several
-//     `soundfx()` calls in the same tick simply overwrite each other and only
-//     the last is heard; this port reproduces that by recording the last
-//     request and emitting one tone per tick, rather than firing up to ~50
-//     simultaneous Vircon32 voices from `outpt_animBoom()`'s own per-building
-//     loop.
+//   - Sound: `cstrFlushSound()` is now a direct, faithful port of real
+//     upstream's own `outpt_soundfx(fxno)` - every real `gb.sound.command()`
+//     call (waveform/volume-slide/pitch-slide, the real `fxno`-dependent
+//     volume included) restored via `gbSoundCommand()`, followed by the real
+//     literal `gbPlayNoteChannel(17, 3, 0)` - not an approximation. Real
+//     hardware has ONE sound channel, so several `soundfx()` calls in the
+//     same tick simply overwrite each other and only the last is heard;
+//     this port reproduces that by recording the last request
+//     (`cstrSfxRequest`) and flushing one real sound-command sequence per
+//     tick, rather than firing up to ~50 simultaneous Vircon32 voices from
+//     `outpt_animBoom()`'s own per-building loop. All three real upstream
+//     copies of `outpt_soundfx()` (root/convoi/searchDoc) are byte-for-byte
+//     identical, confirmed by direct diff, so only one real function needed
+//     porting.
 //   - The mission-select screen had room for exactly two preview boxes; with
 //     four missions it now pages two at a time (`lvl % 2` picks the box,
 //     `lvl / 2` the page) and each box is drawn from the tileset its own
@@ -1173,14 +1178,25 @@ void cstrSoundFx( int fxno )
     cstrSfxRequest = fxno;
 }
 
+// Direct port of real outpt_soundfx(fxno) - every real gb.sound.command()
+// call restored via gbSoundCommand(), followed by the real literal
+// gbPlayNoteChannel(17, 3, 0). Real upstream's own commented-out pitch-slide
+// line (`//gb.sound.command(3,0,53-58,0)`) is genuinely dead code, not
+// ported.
 void cstrFlushSound()
 {
     if( cstrSfxRequest < 0 )
       return;
 
-    // Upstream's own literal `gb.sound.playNote(17, 3, 0)` - the surrounding
-    // waveform/volume/pitch-slide commands have no equivalent here.
-    gbPlayNote( 17, 3 );
+    if( cstrSfxRequest == 0 )
+      gbSoundCommand( GB_CMD_VOLUME, 3, 0, 0 );
+    else
+      gbSoundCommand( GB_CMD_VOLUME, 10, 0, 0 );
+
+    gbSoundCommand( GB_CMD_INSTRUMENT, 1, 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, 0, -7, 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, 0, -8, 0 );
+    gbPlayNoteChannel( 17, 3, 0 );
     cstrSfxRequest = -1;
 }
 

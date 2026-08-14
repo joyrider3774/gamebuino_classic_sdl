@@ -323,6 +323,25 @@ void md_stopTone();
 // regardless of which game (if any) is running
 void md_updateAudio();
 
+// A real, continuously-retunable sustained tone, for gamebuinoShim.c's own
+// tracker/pattern engine - a real note's pitch/volume can change smoothly
+// while it's still sounding, driven by a real instrument envelope/slide/
+// arpeggio/tremolo effect, unlike md_playTone()'s own fire-and-forget,
+// fixed-duration one-shot model (which isn't a fit for that). Returns the
+// backend's own internal voice slot now playing freqHz at the given 0..1
+// volume, or -1 if every voice is already busy; pass that same value to
+// md_trackerVoiceRetune()/md_trackerVoiceStop() for the rest of that
+// note's life. Shares the same underlying voice pool as md_playTone().
+int md_trackerVoiceStart( float freqHz, float volume );
+
+// Retunes an already-started tracker voice in place - no new attack, no
+// click, matching real hardware's own continuously-updated oscillator.
+void md_trackerVoiceRetune( int channel, float freqHz, float volume );
+
+// Ends a tracker voice for good (the note itself has finished, not just a
+// mid-note retune).
+void md_trackerVoiceStop( int channel );
+
 // =============================================================================
 //   MEMORY CARD (backs eepromShim.h's persistent per-game EEPROM emulation)
 // =============================================================================

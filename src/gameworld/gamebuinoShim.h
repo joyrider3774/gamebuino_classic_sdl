@@ -307,14 +307,83 @@ void gbDrawChar( int ch, int x, int y );
 // -----------------------------------------------------------------------------
 //   Sound
 // -----------------------------------------------------------------------------
-// pitch matches real Gamebuino's own MIDI-style note numbers (0 = C, 12 =
-// one octave up, etc, A4=440Hz at pitch 45 relative to a C0 base - the same
-// convention real Sound.cpp's own noteToFrequency table uses) so upstream
-// playNote(pitch, duration, channel) call sites port with the pitch value
-// unchanged. duration is in real Gamebuino "ticks" (1 tick = 1 real update()
-// frame on real hardware) - converted to seconds against the shim's own
-// configured frame rate.
+// A direct port of real Gamebuino Classic's own single-oscillator-per-
+// channel tracker engine (Sound.h/.cpp) - notes, patterns (note sequences
+// plus volume/instrument/slide/arpeggio/tremolo commands), and tracks
+// (pattern sequences), across up to MAX_SOUND_CHANNELS real channels
+// (0-3) - see gamebuinoShim.c's own header comment on this section for the
+// full design writeup (ported directly from the sibling
+// gamebuino_classic_vircon32 project's own already-proven engine).
+//
+// pitch (everywhere in this API) is a direct 0-35 index into the real
+// 36-entry _halfPeriods pitch table (EXTENDED_NOTE_RANGE's own real
+// default of 0) - NOT a MIDI note number. duration is in real display
+// frames (1 frame = 1 real gbUpdate()==true tick), scaled internally by
+// gbSoundPrescaler to stay wall-clock-consistent across games configured
+// at different frame rates, matching real Gamebuino::setFrameRate()'s own
+// identical prescaler recompute.
 
+// -- Patterns/tracks/instruments - the full tracker engine --
+
+// Registers channel's own array of pattern pointers (indexed by the
+// pattern-ID byte a track's own words reference) / instrument pointers
+// (indexed by gbSoundCommand(GB_CMD_INSTRUMENT, id, ...)'s own X
+// argument). A channel that never gets its own gbChangeInstrumentSet()
+// call still has the real default square/noise pair (see
+// gbInitSoundEngine()'s own doc comment in gamebuinoShim.c).
+void gbChangePatternSet( int** patterns, int channel );
+void gbChangeInstrumentSet( int** instruments, int channel );
+
+// Starts a real pattern (a 0-terminated array of packed note/command
+// words) on one channel - see gbPlayOK()'s own doc comment further below
+// for the exact real word bit layout.
+void gbPlayPattern( int* pattern, int channel );
+void gbStopPattern( int channel );
+void gbStopPatternAll();
+void gbSetPatternLooping( bool loop, int channel );
+
+// Starts a real track (a 0xFFFF-terminated array of packed pattern-ID +
+// transposition words) on one channel - needs a real gbChangePatternSet()
+// call on that same channel first.
+void gbPlayTrack( int* track, int channel );
+void gbStopTrack( int channel );
+void gbStopTrackAll();
+
+// Sets per-channel volume/instrument/slide/arpeggio/tremolo state, read
+// back on every subsequent note played on that channel until changed
+// again - real, load-bearing public API many real games call directly
+// (not just from inside pattern data), e.g. a real, widely-reused
+// "soundfx table" idiom shared across several already-ported games'
+// own upstream source: X is 0-31, Y is a signed -16..15 offset -
+// matching real hardware's own exact argument shape.
+#define GB_CMD_VOLUME     0
+#define GB_CMD_INSTRUMENT 1
+#define GB_CMD_SLIDE      2
+#define GB_CMD_ARPEGGIO   3
+#define GB_CMD_TREMOLO    4
+void gbSoundCommand( int cmd, int X, int Y, int channel );
+
+// Starts a single note on one channel directly, using whatever state that
+// channel's own last gbSoundCommand() calls set.
+void gbPlayNoteChannel( int pitch, int duration, int channel );
+void gbStopNoteChannel( int channel );
+void gbStopNoteAll();
+
+// Internal - called automatically once per real tick from gbRenderFrame()/
+// once per real game launch from gbBegin(). Not meant to be called by a
+// game directly (same "automatic, not a game-facing call" contract as
+// gbUpdatePopup()).
+void gbRecomputeSoundPrescaler();
+void gbInitSoundEngine();
+void gbUpdateSoundTracker();
+
+// -- One-shot tones - a small, separate primitive, not part of the
+// tracker engine above (no instrument/pattern/track machinery, no per-
+// tick stepping) --
+
+// The common single-channel convenience form real upstream code almost
+// always actually calls (channel 0) - equivalent to
+// gbPlayNoteChannel(pitch, duration, 0).
 void gbPlayNote( int pitch, int duration );
 void gbPlayTick();
 void gbPlayOK();

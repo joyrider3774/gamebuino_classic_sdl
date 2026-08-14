@@ -54,20 +54,14 @@
 // extracted and counted 6400 characters across exactly 100 levels via a
 // script, not assumed).
 //
-// SOUND: upstream's own `sfx(fxno, channel)` drives a real low-level
-// tracker envelope per call (`gb.sound.command(...)` for waveform/volume/
-// volume-slide/pitch-slide, THEN a final `gb.sound.playNote(pitch,
-// duration, channel)`) - `gb.sound.command()` is exactly the low-level
-// tracker/pattern primitive this project's own CLAUDE.md already documents
-// as out of scope for this first sound pass (see gameShipwrek.c's own
-// header comment for the same real gap, hit and handled identically
-// there first). Approximated here as a single `gbPlayNote(pitch,
-// duration)` call using the real envelope table's own final pitch/duration
-// values (`bubSoundFx[fxno][1]`/`[7]`) - `bubSfx()` below. The `channel`
-// parameter upstream always passes as a literal `0` (single-channel
-// upstream anyway) has no equivalent parameter here since `gbPlayNote()`
-// has no channel argument (this shim's own single implicit channel design)
-// - dropped, not a loss since upstream never varies it.
+// SOUND: a faithful, byte-for-byte port of real `sfx(fxno, channel)` -
+// `bubSfx(fxno)` below drives the real waveform/volume/volume-slide/pitch-
+// slide `gb.sound.command()` sequence (`GB_CMD_VOLUME`/`GB_CMD_INSTRUMENT`/
+// `GB_CMD_SLIDE`/`GB_CMD_ARPEGGIO`) in upstream's own exact order before
+// `gbPlayNoteChannel()`, using the real envelope table (`bubSoundFx[][8]`)
+// unchanged. The `channel` parameter upstream always passes as a literal
+// `0` is hardcoded to channel 0 here too - dropped as a function parameter
+// only because upstream itself never varies it.
 //
 // REAL EEPROM USAGE: upstream genuinely persists which of the 100 levels
 // have been completed (`levelsDone[13]`, a 100-bit table packed 8 bits/
@@ -271,9 +265,7 @@ int bubFlagBitmap[8] =
 };
 
 // {waveform, pitch, pmd/pmt-ish, vmt, vmd, vol-slide, volume, length} - real
-// upstream envelope table (sounds.ino); only [1] (pitch) and [7] (length)
-// are used here (see this file's own header comment on bubSfx()'s
-// approximation of the real tracker envelope).
+// upstream envelope table (sounds.ino), used in full by bubSfx() below.
 int bubSoundFx[7][8] =
 {
     {0,3,116,1,6,3,4,3},   // oof
@@ -357,7 +349,11 @@ char bubIconRight[2] = { 16, 0 };      // icon alone (either row's own right-han
 
 void bubSfx( int fxno )
 {
-    gbPlayNote( bubSoundFx[ fxno ][ 1 ], bubSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, bubSoundFx[ fxno ][ 6 ], 0, 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, bubSoundFx[ fxno ][ 0 ], 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, bubSoundFx[ fxno ][ 5 ], -bubSoundFx[ fxno ][ 4 ], 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, bubSoundFx[ fxno ][ 3 ], bubSoundFx[ fxno ][ 2 ] - 58, 0 );
+    gbPlayNoteChannel( bubSoundFx[ fxno ][ 1 ], bubSoundFx[ fxno ][ 7 ], 0 );
 }
 
 // -----------------------------------------------------------------------

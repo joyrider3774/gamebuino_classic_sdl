@@ -239,14 +239,16 @@
 // used to occupy (no invented replacement text was added there, to avoid
 // presenting invented content as if it were real upstream layout).
 //
-// SOUND - APPROXIMATED, DOCUMENTED: upstream's own `highscore_sound[]` is a
-// real multi-note `PROGMEM` pattern played via `gb.sound.playPattern(...)`
-// - this shim has no pattern/track engine at all (only one-shot tones -
-// see gamebuinoShim.h's own header comment), so entering the new-highscore
-// dialog instead plays one representative `gbPlayOK()` tone, the same
-// "approximate with the closest one-shot primitive, document the
-// simplification" treatment gameFlappyBirdo.c already established for its
-// own dropped FX synth shaping. Every other real sound call ports 1:1:
+// SOUND: upstream's own `highscore_sound[]` (highscore.ino) is a real
+// 17-word `PROGMEM` pattern played via `gb.sound.playPattern(highscore_
+// sound, 0)` right when the new-highscore dialog opens - now plays for
+// real via `gbPlayPattern()`, the real tracker/pattern engine
+// gamebuinoShim.c/.h implements (see that file's own Sound section header
+// comment), using the real, word-for-word `ufoHighscoreSound[]` data below
+// on channel 0, exactly like upstream, through the real default square-
+// wave instrument (no `changeInstrumentSet()`/`command(CMD_INSTRUMENT,...)`
+// call precedes it upstream either, so the engine's own real per-channel
+// default is already correct). Every other real sound call ports 1:1:
 // `playOK()`/`playCancel()`/`playTick()` -> `gbPlayOK()`/`gbPlayCancel()`/
 // `gbPlayTick()`.
 //
@@ -478,6 +480,17 @@ char ufoSaveExitText[14]=
     0
 };
 
+// Real upstream `highscore_sound[]` (highscore.ino) - a short fanfare
+// played via `gb.sound.playPattern(highscore_sound, 0)` the instant the
+// new-highscore dialog opens, copied word-for-word, not hand-transcribed
+// (see this file's own header comment on SOUND). 17 real words including
+// the real 0x0000 terminator gbPlayPattern() itself expects.
+int ufoHighscoreSound[17] =
+{
+    0x0005, 0x140, 0x150, 0x15C, 0x170, 0x180, 0x16C, 0x154, 0x160,
+    0x174, 0x184, 0x14C, 0x15C, 0x168, 0x17C, 0x18C, 0x0000
+};
+
 typedef struct
 {
     float x, y, v, vx, vy, angle;
@@ -642,14 +655,14 @@ void ufoBeginHighscores( int returnState )
     ufoState = UFO_STATE_HIGHSCORES;
 }
 
-// See header comment on SOUND for why this plays one representative
-// gbPlayOK() tone rather than upstream's own real highscore_sound[] pattern.
+// == upstream drawNewHighscore()'s own `gb.sound.playPattern(highscore_
+// sound, 0)` - see header comment on SOUND.
 void ufoBeginNewHighscore( int score )
 {
     ufoPendingTime = score;
     gbSetFont( gbFont5x7 );
     ufoState = UFO_STATE_NEWHIGHSCORE;
-    gbPlayOK();
+    gbPlayPattern( ufoHighscoreSound, 0 );
 }
 
 void ufoBeginSysInfo()

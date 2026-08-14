@@ -489,12 +489,23 @@ void md_armInputAGate()
 // pd->display->setRefreshRate() in init() below.
 #define PLAYDATE_REFRESH_RATE 50
 
-// One synth, not a pool - real Gamebuino Classic hardware's own Sound
-// engine defaults to NUM_CHANNELS=1 (see machineDependent.h's own
-// md_playTone() doc comment), matching every other port's own single-voice
-// choice.
+// One synth for one-shot tones, not a pool - real Gamebuino Classic
+// hardware's own Sound engine defaults to NUM_CHANNELS=1 (see
+// machineDependent.h's own md_playTone() doc comment), matching every
+// other port's own single-voice choice for THIS primitive specifically.
 static PDSynth* gSynth = NULL;
 static int gFrameCounter = 0;
+
+// A separate, small dedicated pool for gamebuinoShim.c's own tracker/
+// pattern engine (md_trackerVoiceStart()/Retune()/Stop() below) - sized to
+// MAX_SOUND_CHANNELS (gamebuinoShim.c's own real per-channel tracker slot
+// count), since that's the actual maximum number of tracker voices ever
+// requested concurrently. Kept separate from gSynth so a one-shot
+// gbPlayTick()/OK()/Cancel() blip never steals or gets stolen by a
+// currently-sustaining tracker note.
+#define TRACKER_MAX_VOICES 4
+static PDSynth* gTrackerSynth[ TRACKER_MAX_VOICES ];
+static bool gTrackerVoiceActive[ TRACKER_MAX_VOICES ];
 
 void md_initAudio()
 {
@@ -507,6 +518,14 @@ void md_initAudio()
     // built-in waveform - no manual oscillator/sample-buffer code needed at
     // all, unlike SDL's own raw-callback approach.
     pd->sound->synth->setWaveform( gSynth, kWaveformSquare );
+
+    int i;
+    for( i = 0; i < TRACKER_MAX_VOICES; i++ )
+    {
+        gTrackerSynth[ i ] = pd->sound->synth->newSynth();
+        pd->sound->synth->setWaveform( gTrackerSynth[ i ], kWaveformSquare );
+        gTrackerVoiceActive[ i ] = false;
+    }
 }
 
 void md_playTone( float freqHz, float durationSeconds )
@@ -538,6 +557,71 @@ void md_playTone( float freqHz, float durationSeconds )
 void md_stopTone()
 {
     pd->sound->synth->noteOff( gSynth, 0 );
+}
+
+// See machineDependent.h's own doc comment for the general rationale (a
+// continuously-retunable voice for gamebuinoShim.c's own tracker/pattern
+// engine). Real Playdate `len==-1` (per pd_api_sound.h's own doc comment
+// on PDSynth::playNote) means "play indefinitely" - exactly the sustained-
+// until-explicitly-stopped lifetime a tracker note needs, driven by real
+// note-duration/instrument-envelope logic in gamebuinoShim.c, not a fixed
+// wall-clock timer the way md_playTone()'s own one-shot voice uses.
+int md_trackerVoiceStart( float freqHz, float volume )
+{
+    if( freqHz <= 0.0f )
+      return -1;
+
+    int slot = -1;
+    int i;
+    for( i = 0; i < TRACKER_MAX_VOICES; i++ )
+    {
+        if( !gTrackerVoiceActive[ i ] )
+        {
+            slot = i;
+            break;
+        }
+    }
+    if( slot < 0 )
+      slot = 0; // every voice already busy - steal the first one rather than silently dropping the note
+
+    pd->sound->synth->setVolume( gTrackerSynth[ slot ], volume, volume );
+    pd->sound->synth->playNote( gTrackerSynth[ slot ], freqHz, 1.0f, -1.0f, 0 );
+    gTrackerVoiceActive[ slot ] = true;
+
+    return slot;
+}
+
+// A real, honest platform limitation, not an oversight: the Playdate SDK's
+// own PDSynth has no "change the pitch of the note already playing"
+// primitive (`setFrequencyModulator()` exists, but that's an LFO-style
+// modulator signal, not a plain retune call) - the only way to change a
+// synth's pitch is to start a new note on it. Retuning here is therefore a
+// fresh `playNote()` call on the SAME synth object (still `len=-1`,
+// indefinite) rather than a smooth in-place frequency slide - real
+// hardware's own Sound engine genuinely does slide pitch continuously
+// within a single sustained oscillator (see Sound::generateOutput()'s own
+// _chanHalfPeriod retune), so a game with heavy real-time arpeggio/slide
+// use may have a slightly more "stepped" retune character on this port
+// specifically than on the SDL ports' own phase-accumulator-based voices
+// (which retune with zero discontinuity) - acceptable given how short each
+// real instrument step/effect interval already is in practice (typically
+// a handful of real ticks), not worth a bigger synth-pool workaround for.
+void md_trackerVoiceRetune( int channel, float freqHz, float volume )
+{
+    if( channel < 0 || channel >= TRACKER_MAX_VOICES || freqHz <= 0.0f )
+      return;
+
+    pd->sound->synth->setVolume( gTrackerSynth[ channel ], volume, volume );
+    pd->sound->synth->playNote( gTrackerSynth[ channel ], freqHz, 1.0f, -1.0f, 0 );
+}
+
+void md_trackerVoiceStop( int channel )
+{
+    if( channel < 0 || channel >= TRACKER_MAX_VOICES )
+      return;
+
+    pd->sound->synth->noteOff( gTrackerSynth[ channel ], 0 );
+    gTrackerVoiceActive[ channel ] = false;
 }
 
 // md_getFrameCounter() is declared by machineDependent.h and referenced by

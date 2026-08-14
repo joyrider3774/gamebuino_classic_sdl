@@ -226,22 +226,16 @@
 // design (a lunar-lander "tap the main engine for a controlled boost,
 // hold the side thrusters to steer" feel), not a porting artifact.
 //
-// SOUND: real `playsoundfx()` drives a full real `Sound::command()`
-// sequence per effect (waveform select, a volume level, a volume slide,
-// and a pitch slide, all read out of `soundfx[][]`'s own 8 columns) before
-// playing one real note on top of all of that shaping. This shim only has
-// one-shot `gbPlayNote(pitch,duration)` - no waveform-select/volume-slide/
-// pitch-slide primitives exist here at all (see gamebuinoShim.h's own real
-// API surface) - so `landPlaySoundFx()` approximates every one of the 5
-// real sound effects (thrust/crash/landing-success/fuel-low/pick-up-fuel)
-// with a single plain `gbPlayNote()` call using upstream's own exact real
-// pitch/duration values (`soundfx[fxno][1]`/`soundfx[fxno][7]`, the same
-// two columns upstream's own `playNote()` call used), dropping the
-// waveform/volume-slide/pitch-slide shaping entirely - a real, documented
-// simplification, not a bug: every effect now sounds like a plain flat
-// tone rather than upstream's own shaped blip. `channel` is kept as a
-// parameter for a literal, minimal-diff port of every real call site, but
-// is unused (this shim's `gbPlayNote()` has no channel concept).
+// SOUND: real `playsoundfx(fxno,channel)` builds a small per-channel
+// FX-synth preset each call (waveform/instrument, volume slide, pitch/
+// arpeggio slide `gb.sound.command(...)` calls, from the real
+// `soundfx[][]` table) before playing one real note on top -
+// `landPlaySoundFx(fxNo,channel)` is a real, faithful port of this using
+// this shim's own `gbSoundCommand()`/`gbPlayNoteChannel()` primitives (a
+// direct port of real Sound.h's own per-channel tracker commands). All 12
+// real `playsoundfx()` call sites already passed the same real channel
+// number upstream itself uses at that exact site (0 or 1), so no call
+// site needed to change.
 // `checkpickup()` is a genuine empty stub upstream (an apparently
 // unfinished/leftover fuel-pickup feature, never actually implemented in
 // this source) - ported as a literal no-op function, call site preserved,
@@ -449,9 +443,8 @@ int landLevels[10][38]=
   {21,12, 0x01,0xE0,0x38, 0x00,0xF0,0x18, 0x48,0x78,0x08, 0xFC,0x3F,0x88, 0xFC,0x3F,0xC0, 0xF8,0x7F,0x80, 0xF0,0x7F,0x00, 0xF0,0xF6,0x00, 0xD0,0x40,0x08, 0x90,0x00,0x18, 0x80,0x00,0x78, 0xFF,0xFF,0xF8},
 };
 
-// Real per-effect [waveform, pitch, ?, ?, ?, ?, volume, duration] table -
-// only columns 1 (pitch) and 7 (duration) are actually used by this port's
-// own landPlaySoundFx() - see header comment on the sound simplification.
+// Real per-effect [waveform, pitch, ?, ?, ?, ?, volume, duration] table,
+// copied verbatim - see header comment.
 int landSoundFx[5][8]=
 {
   {1,17,53,0,7,0,7,3},  // 0 = thrust (channel 0)
@@ -463,8 +456,11 @@ int landSoundFx[5][8]=
 
 void landPlaySoundFx( int fxNo, int channel )
 {
-    channel = channel; // unused - this shim's gbPlayNote() has no channel parameter
-    gbPlayNote( landSoundFx[ fxNo ][ 1 ], landSoundFx[ fxNo ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, landSoundFx[ fxNo ][ 6 ], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, landSoundFx[ fxNo ][ 0 ], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, landSoundFx[ fxNo ][ 5 ], -landSoundFx[ fxNo ][ 4 ], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, landSoundFx[ fxNo ][ 3 ], landSoundFx[ fxNo ][ 2 ] - 58, channel );
+    gbPlayNoteChannel( landSoundFx[ fxNo ][ 1 ], landSoundFx[ fxNo ][ 7 ], channel );
 }
 
 // Right-aligns a growing number by shifting its start position left by

@@ -113,12 +113,11 @@
 //   entirety (the jump sound, `sound_play(5)` in `Player.ino`) - every
 //   other entry is real, genuine dead data. Ported faithfully as-is (the
 //   full table is kept for fidelity, but no extra call sites were
-//   invented) - this shim has no tracker/pattern engine (see
-//   `gamebuinoShim.h`'s own header comment), so `roboSoundPlay()`
-//   approximates the one real call with a single `gbPlayNote(pitch,
-//   duration)` using the table's own real pitch/duration columns
-//   (indices [1]/[7]) exactly, matching gameInvaders.c's own established
-//   `invPlaySfx()` precedent for the identical real simplification.
+//   invented) - `roboSoundPlay(fxno)` is a direct, byte-for-byte port of
+//   real upstream's own `sound_play(byte fxno)`: the same 4
+//   `gbSoundCommand()` calls (volume/instrument/slide/arpeggio, always
+//   channel 0, matching upstream's own hardcoded `0` argument throughout)
+//   plus a final `gbPlayNoteChannel()`.
 //
 // STATE MACHINE: real upstream's own `loop()` switches on `runningLevel%4`
 // (0=level-intro title card, 1=platforming, 2=boss-approach walk-in,
@@ -334,11 +333,16 @@ int roboSoundfx[48] = {
     0, 0, 65, 1, 1, 1, 7, 5,
 };
 
+// Direct port of real upstream's own `void sound_play(byte fxno)` -
+// always channel 0, matching every one of that function's own real
+// gb.sound.command()/playNote() calls exactly.
 void roboSoundPlay( int fxno )
 {
-    int pitch = roboSoundfx[ fxno * 8 + 1 ];
-    int duration = roboSoundfx[ fxno * 8 + 7 ];
-    gbPlayNote( pitch, duration );
+    gbSoundCommand( GB_CMD_VOLUME, roboSoundfx[ fxno * 8 + 6 ], 0, 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, roboSoundfx[ fxno * 8 + 0 ], 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, roboSoundfx[ fxno * 8 + 5 ], -roboSoundfx[ fxno * 8 + 4 ], 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, roboSoundfx[ fxno * 8 + 3 ], roboSoundfx[ fxno * 8 + 2 ] - 58, 0 );
+    gbPlayNoteChannel( roboSoundfx[ fxno * 8 + 1 ], roboSoundfx[ fxno * 8 + 7 ], 0 );
 }
 
 // -----------------------------------------------------------------------------

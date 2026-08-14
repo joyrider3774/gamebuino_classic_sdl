@@ -129,25 +129,47 @@
 // game the real force-cancel capability upstream's own upstream code
 // relies on.
 //
-// SOUND - APPROXIMATED WITH ONE-SHOT PRIMITIVES, DOCUMENTED: this shim has
-// no pattern/track player (`gbPlayNote()`/`gbPlayTick()`/`gbPlayOK()`/
-// `gbPlayCancel()` only - see gamebuinoShim.h's own header comment), while
-// upstream calls real `gb.sound.playPattern(name_sound, channel)` for
-// every weapon-fire/explosion/enemy/jump/pickup effect (13 real distinct
-// `PROGMEM` note patterns). Matching gameUfoRace.c's own established
-// "approximate with the closest one-shot primitive" treatment: every real
-// `playPattern()` call site below instead plays one representative
-// `gbPlayNote(pitch, duration)` (a distinct pitch per effect, picked purely
-// for audible variety, not derived from the real pattern's own actual
-// note data) or, where upstream itself already only calls a one-shot
-// primitve (`playTick()`/`playOK()`), that same real call unchanged.
-// `gb.sound.chanVolumes[2] = 1;` (a real 3-channel pattern-mixer volume
-// tweak, upstream's own setup()-time comment: "this game requires 3
-// channels...") has no equivalent at all in this shim (no per-channel
-// volume, no multi-channel pattern engine) and is dropped outright,
-// matching this project's established norm for a feature with no shim
-// equivalent. `gb.pickRandomSeed()`/`gb.battery.show = false;` are dropped
-// too, matching gamePong.c's own identical treatment of both.
+// SOUND - REAL PATTERNS, PLAYED FOR REAL: every real upstream
+// `gb.sound.playPattern(name_sound, channel)` call (13 real distinct
+// weapon-fire/explosion/enemy/jump/pickup effects) now plays for real via
+// `gbPlayPattern()` - the real tracker/pattern engine gamebuinoShim.c/.h
+// implements (see that file's own Sound section header comment) - using
+// the real, byte-for-byte pattern data (`scbBlastSound[]`/
+// `scbRocketSound[]`/`scbMachinegunSound[]`/`scbGrenadeSound[]`/
+// `scbShotgunSound[]`/`scbLaserSound[]`/`scbClubSound[]`/`scbJumpSound[]`/
+// `scbEnemyFeltSound[]`/`scbEnemyDeathSound[]`/`scbPowerUpSound[]`, see the
+// "Sound patterns" section below), each played on the exact real channel
+// upstream's own call site uses (0 for every weapon-fire/blast effect, 1
+// for jump/enemy-death, 2 for enemy-felt/two of the three `power_up_sound`
+// sites - real upstream's own `Weapon::shoot()`/`Bullet::update()`/
+// `Player::update()`/`Enemy::update()`/`Crate::update()` call sites were
+// each individually traced to confirm both the pattern name and channel
+// number). No `changeInstrumentSet()`/`command(CMD_INSTRUMENT,...)` call
+// precedes any of them upstream either, so the engine's own real default
+// square-wave instrument on every channel is already correct.
+// `playTick()`/`playOK()` (PISTOL/AKIMBO/RIFLE fire, and picking up a
+// crate) were already real one-shot calls, unchanged.
+// `player_damage_sound[]`/`revolver_sound[]` (2 of the 13 real declared
+// constants) are genuinely never referenced anywhere in real upstream
+// source (confirmed via grep), so, matching this file's own already-
+// established treatment of `largeChecker`, they're correctly omitted here
+// too - only the 11 real, actually-called patterns are ported.
+// `gb.sound.chanVolumes[2] = 1;` (upstream's own setup()-time comment:
+// "this game requires 3 channels...") is dropped outright, matching the
+// engine's own deliberate, documented design (see gamebuinoShim.c's own
+// comment on `gbUpdateNoteChannel()`): real hardware's `chanVolumes`/
+// `globalVolume` exist purely to keep several real channels summed into
+// ONE shared physical PWM output from clipping, which doesn't apply here
+// (each Vircon32/SDL sound channel mixes independently). Worth noting: on
+// real hardware this specific call is also provably a no-op -
+// `VOLUME_CHANNEL_MAX` (real `Sound.cpp`'s own real per-channel default,
+// `255/NUM_CHANNELS/7/9`) evaluates to exactly `1` for any of upstream's
+// own commented "requires 3 channels" value, this project's real
+// `MAX_SOUND_CHANNELS` of 4, or the real library's own default of 1 - so
+// `chanVolumes[2]` already defaults to the same `1` this line explicitly
+// (and redundantly) sets it to on real hardware too. `gb.pickRandomSeed()`/
+// `gb.battery.show = false;` are dropped, matching gamePong.c's own
+// identical treatment of both.
 //
 // SEVERAL REAL UPSTREAM BUGS/QUIRKS, TRACED THROUGH (NOT ASSUMED) AND
 // PRESERVED EXACTLY, PER THIS PROJECT'S OWN ESTABLISHED NORM:
@@ -742,6 +764,29 @@ void scbUpdatePopup()
 }
 
 // -----------------------------------------------------------------------------
+// Sound patterns - real upstream `PROGMEM uint16_t[]` pattern data, copied
+// byte-for-byte (verified against the real source directly, not retyped
+// from memory - each array's own element count was cross-checked against
+// the real source line's own comma-separated value count). Played through
+// gbPlayPattern() on the real channel each real call site below uses -
+// `player_damage_sound`/`revolver_sound` are genuinely never referenced
+// anywhere in real upstream (confirmed via grep), so, matching this file's
+// own established treatment of `largeChecker`, they're correctly omitted.
+// -----------------------------------------------------------------------------
+
+int scbGrenadeSound[ 3 ] = { 0x0045, 0x012C, 0x0000 };
+int scbMachinegunSound[ 7 ] = { 0x0045, 0x140, 0x8141, 0x7849, 0x788D, 0x52C, 0x0000 };
+int scbRocketSound[ 5 ] = { 0x8045, 0x8001, 0x8889, 0x3C5C, 0x0000 };
+int scbBlastSound[ 5 ] = { 0x0045, 0x7849, 0x784D, 0xA28, 0x0000 };
+int scbPowerUpSound[ 17 ] = { 0x0005, 0x140, 0x150, 0x15C, 0x170, 0x180, 0x16C, 0x154, 0x160, 0x174, 0x184, 0x14C, 0x15C, 0x168, 0x17C, 0x18C, 0x0000 };
+int scbEnemyDeathSound[ 3 ] = { 0x0045, 0x184, 0x0000 };
+int scbJumpSound[ 5 ] = { 0x0005, 0x7049, 0x884D, 0x354, 0x0000 };
+int scbEnemyFeltSound[ 5 ] = { 0x8005, 0x8001, 0x8849, 0xF20, 0x0000 };
+int scbShotgunSound[ 4 ] = { 0x0045, 0x7049, 0x334, 0x0000 };
+int scbLaserSound[ 5 ] = { 0x0005, 0x784D, 0x7849, 0x670, 0x0000 };
+int scbClubSound[ 5 ] = { 0x8005, 0x784D, 0x7849, 0x318, 0x0000 };
+
+// -----------------------------------------------------------------------------
 // Box physics - the one real shared step every entity below calls, see
 // this file's own header comment (quirk 1) on the real Y-axis-gated-on-
 // xBounce behavior this reproduces exactly.
@@ -937,7 +982,7 @@ void scbBulletUpdate( int i )
         scbBullets[ i ].timeLeft = 8;
         scbShakeTimeLeft = 10;
         scbShakeAmplitude = 2;
-        gbPlayNote( 25, 8 ); // approximates real blast_sound - see header comment on SOUND
+        gbPlayPattern( scbBlastSound, 0 ); // real blast_sound, channel 0
     }
 }
 
@@ -1119,13 +1164,13 @@ void scbWeaponShoot()
       scbWeaponAddBullet( scbPlayerX, scbPlayerY, scbPlayerDir, SCB_W_SHELL );
 
     if( scbWeaponSubtype == SCB_W_ROCKET )
-      gbPlayNote( 30, 6 );
+      gbPlayPattern( scbRocketSound, 0 );
     else if( scbWeaponSubtype == SCB_W_REVOLVER || scbWeaponSubtype == SCB_W_MACHINEGUN || scbWeaponSubtype == SCB_W_SNIPER )
-      gbPlayNote( 50, 2 );
+      gbPlayPattern( scbMachinegunSound, 0 );
     else if( scbWeaponSubtype == SCB_W_GRENADE || scbWeaponSubtype == SCB_W_DISK )
-      gbPlayNote( 40, 3 );
+      gbPlayPattern( scbGrenadeSound, 0 );
     else if( scbWeaponSubtype == SCB_W_SHOTGUN )
-      gbPlayNote( 45, 3 );
+      gbPlayPattern( scbShotgunSound, 0 );
     else if( scbWeaponSubtype == SCB_W_MINE )
     {
         // no sound - matches real upstream's own empty case
@@ -1133,9 +1178,9 @@ void scbWeaponShoot()
     else if( scbWeaponSubtype == SCB_W_PISTOL || scbWeaponSubtype == SCB_W_AKIMBO || scbWeaponSubtype == SCB_W_RIFLE )
       gbPlayTick();
     else if( scbWeaponSubtype == SCB_W_LASER )
-      gbPlayNote( 70, 4 );
+      gbPlayPattern( scbLaserSound, 0 );
     else if( scbWeaponSubtype == SCB_W_CLUB )
-      gbPlayNote( 35, 2 );
+      gbPlayPattern( scbClubSound, 0 );
 }
 
 void scbWeaponUpdate()
@@ -1359,14 +1404,14 @@ void scbPlayerUpdate()
             {
                 scbPlayerVy = -32;
                 scbPlayerJumping = 1;
-                gbPlayNote( 60, 3 ); // approximates real jump_sound
+                gbPlayPattern( scbJumpSound, 1 ); // real jump_sound, channel 1
             }
             else if( !scbPlayerDoubleJumped )
             {
                 scbPlayerVy = -32;
                 scbPlayerDoubleJumped = 1;
                 scbPlayerJumping = 1;
-                gbPlayNote( 60, 3 );
+                gbPlayPattern( scbJumpSound, 1 );
             }
         }
         // real `(timeHeld(B) > 0) && (timeHeld(B) < 5)` -> held for between 1 and 4 ticks inclusive
@@ -1502,7 +1547,7 @@ void scbEnemyUpdate( int i )
             scbEnemies[ i ].x = scbWorldGetWidth() / 2 - width / 2;
             scbEnemies[ i ].y = 0;
             scbEnemies[ i ].vx = scbEnemies[ i ].dir * 20;
-            gbPlayNote( 20, 4 ); // approximates real enemy_felt_sound
+            gbPlayPattern( scbEnemyFeltSound, 2 ); // real enemy_felt_sound, channel 2
         }
         else
           scbEnemies[ i ].active = 0;
@@ -1564,7 +1609,7 @@ void scbEnemiesUpdate()
                     scbEnemies[ i ].vx = dir * scbArduinoRandom( 24, 32 );
                     // real `random(-48,-64)` - see header comment (quirk 6): min>=max collapses to the constant -48, not a range.
                     scbEnemies[ i ].vy = scbArduinoRandom( -48, -64 );
-                    gbPlayNote( 55, 3 ); // approximates real enemy_death_sound
+                    gbPlayPattern( scbEnemyDeathSound, 1 ); // real enemy_death_sound, channel 1
                 }
                 else if( scbBullets[ j ].subtype == SCB_W_CLUB ) // go away from the player when hit by a club
                 {
@@ -1686,7 +1731,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_RIFLE;
                     scbWeaponSubtype = SCB_W_RIFLE;
                     scbPopup( "RIFLE UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 ); // approximates real power_up_sound
+                    gbPlayPattern( scbPowerUpSound, 2 ); // real power_up_sound, channel 2
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_2 )
@@ -1696,7 +1741,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_SHOTGUN;
                     scbWeaponSubtype = SCB_W_SHOTGUN;
                     scbPopup( "SHOTGUN UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 2 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_3 )
@@ -1705,7 +1750,7 @@ void scbCrateUpdate()
                 {
                     scbUnlockedMaps = 1;
                     scbPopup( "NEW MAP UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
         }
@@ -1718,7 +1763,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_ROCKET;
                     scbWeaponSubtype = SCB_W_ROCKET;
                     scbPopup( "ROCKETS UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_2 )
@@ -1728,7 +1773,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_CLUB;
                     scbWeaponSubtype = SCB_W_CLUB;
                     scbPopup( "CLUB UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_3 )
@@ -1738,7 +1783,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_REVOLVER;
                     scbWeaponSubtype = SCB_W_REVOLVER;
                     scbPopup( "REVOLVER UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_4 )
@@ -1748,7 +1793,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_MINE;
                     scbWeaponSubtype = SCB_W_MINE;
                     scbPopup( "MINES UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_5 )
@@ -1757,7 +1802,7 @@ void scbCrateUpdate()
                 {
                     scbUnlockedMaps = 2;
                     scbPopup( "NEW MAP UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
         }
@@ -1770,7 +1815,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_SNIPER;
                     scbWeaponSubtype = SCB_W_SNIPER;
                     scbPopup( "SNIPER UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_2 )
@@ -1780,7 +1825,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_MACHINEGUN;
                     scbWeaponSubtype = SCB_W_MACHINEGUN;
                     scbPopup( "MACHINEGUN UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_3 )
@@ -1790,7 +1835,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_GRENADE;
                     scbWeaponSubtype = SCB_W_GRENADE;
                     scbPopup( "GRENADES UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_4 )
@@ -1800,7 +1845,7 @@ void scbCrateUpdate()
                     scbUnlockedWeapons = SCB_W_AKIMBO;
                     scbWeaponSubtype = SCB_W_AKIMBO;
                     scbPopup( "AKIMBO UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
             else if( scbPlayerScore == SCB_SCORETHRESHOLD_5 )
@@ -1809,7 +1854,7 @@ void scbCrateUpdate()
                 {
                     scbUnlockedMaps = 3;
                     scbPopup( "NEW MAP UNLOCKED!", 40 );
-                    gbPlayNote( 80, 10 );
+                    gbPlayPattern( scbPowerUpSound, 0 );
                 }
             }
         }

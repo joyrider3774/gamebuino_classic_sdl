@@ -164,17 +164,17 @@
 // dialect's own full-range 32-bit `int` is used throughout with no
 // narrowing step at all.
 //
-// SOUND: upstream's own `playSound()` helper issues 5 real `gb.sound.
-// command(...)` calls (note volume, instrument select, volume slide,
-// pitch slide, tremolo) before the actual `gb.sound.playNote(pitch,
-// duration, channel)` - this shim has no `command()`-level tracker
-// primitive at all (a documented, deliberate, already-covered scope limit
-// - see this project's own CLAUDE.md - not a gap to flag). Approximated
-// sensibly here as `skiPlaySound(pitch, duration)`, a thin wrapper over
-// `gbPlayNote()` alone, dropping only the volume/pitch-slide/tremolo
-// shaping detail (a real but purely cosmetic sound-texture difference,
-// not a change to when/why any of the 5 real cues plays: jump, power-
-// slide, crash, pause, and resume).
+// SOUND: a faithful, byte-for-byte port of real `playSound(const int *snd,
+// byte channel)` - `skiPlaySound(int* snd)` drives the same 5 real
+// `gb.sound.command(...)` calls (note volume, instrument select, volume
+// slide, pitch slide via the arpeggio command, tremolo) in upstream's own
+// exact order before `gbPlayNoteChannel()`, always on channel 0 (upstream's
+// own `channel` parameter is a literal `0` at every real call site). The 5
+// real envelope tables from upstream's own `Sound.h` (`skiSndJump`/
+// `skiSndSlide`/`skiSndCrash`/`skiSndResume`/`skiSndPause`) are copied
+// verbatim (10 entries each: volume, instrument ID, volume-slide step
+// duration/depth, pitch-slide step duration/depth, tremolo step
+// duration/depth, pitch, duration).
 //
 // EEPROM: upstream's own `getHighScore()`/`saveHighScore()` read/write two
 // raw EEPROM bytes directly (address 0 = low byte, address 1 = high byte -
@@ -535,14 +535,26 @@ void skiDrawScore()
 }
 
 // -----------------------------------------------------------------------------
-// Sound - see this file's own header comment on why the real command()-
-// level volume/pitch-slide/tremolo shaping is dropped, keeping just pitch+
-// duration.
+// Sound - real Sound.h envelope tables (Volume, Instrument ID, Volume Slide
+// Step Duration/Depth, Pitch Slide Step Duration/Depth, Tremolo Step
+// Duration/Depth, Pitch, Duration), copied verbatim.
 // -----------------------------------------------------------------------------
 
-void skiPlaySound( int pitch, int duration )
+int skiSndJump[10]   = { 4, 0, 1, -1, 1,  2, 0, 0, 23, 4 };
+int skiSndSlide[10]  = { 4, 1, 1, -1, 1, -2, 0, 0, 16, 4 };
+int skiSndCrash[10]  = { 6, 1, 1, -1, 0,  0, 0, 0,  0, 6 };
+int skiSndResume[10] = { 1, 0, 0,  0, 4, -5, 0, 0, 60, 6 };
+int skiSndPause[10]  = { 1, 0, 0,  0, 4,  5, 0, 0, 55, 6 };
+
+// Direct port of real `playSound(const int *snd, byte channel)`.
+void skiPlaySound( int* snd )
 {
-    gbPlayNote( pitch, duration );
+    gbSoundCommand( GB_CMD_VOLUME, snd[ 0 ], 0, 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, snd[ 1 ], 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, snd[ 2 ], snd[ 3 ], 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, snd[ 4 ], snd[ 5 ], 0 );
+    gbSoundCommand( GB_CMD_TREMOLO, snd[ 6 ], snd[ 7 ], 0 );
+    gbPlayNoteChannel( snd[ 8 ], snd[ 9 ], 0 );
 }
 
 // -----------------------------------------------------------------------------
@@ -843,7 +855,7 @@ void skiPlayerThink( int self )
 
     // Button B - Jump
     if( gbPressed( BTN_B ) )
-      skiPlaySound( 23, 4 ); // sndJump
+      skiPlaySound( skiSndJump );
     if( gbRepeat( BTN_B, 1 ) )
     {
         if( !skiEntities[ self ].flag1 )
@@ -857,7 +869,7 @@ void skiPlayerThink( int self )
 
     // Button A - Power Slide
     if( gbPressed( BTN_A ) )
-      skiPlaySound( 16, 4 ); // sndSlide
+      skiPlaySound( skiSndSlide );
     if( gbRepeat( BTN_A, 1 ) && !skiEntities[ self ].flag0 )
       skiEntities[ self ].xspeed = 4;
     else
@@ -866,7 +878,7 @@ void skiPlayerThink( int self )
     // Button C - Pause
     if( gbPressed( BTN_C ) )
     {
-        skiPlaySound( 55, 6 ); // sndPause
+        skiPlaySound( skiSndPause );
         skiBeginPause();
         return; // see this file's own header comment on the blocking-call simplification
     }
@@ -917,7 +929,7 @@ void skiThinkGameOver( int self )
 
     if( skiEntities[ self ].flag3 == 0 )
     {
-        skiPlaySound( 0, 6 ); // sndCrash
+        skiPlaySound( skiSndCrash );
         skiEntities[ self ].flag3 = arand( 9 ) + 1;
     }
 
@@ -1176,7 +1188,7 @@ void skiUpdatePause()
         // Button C - Resume Game
         if( gbPressed( BTN_C ) )
         {
-            skiPlaySound( 60, 6 ); // sndResume
+            skiPlaySound( skiSndResume );
             skiResumePlay();
             return;
         }

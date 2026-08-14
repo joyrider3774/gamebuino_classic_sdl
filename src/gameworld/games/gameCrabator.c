@@ -145,27 +145,36 @@
 // identical precedent: `crabHighscore[]` is a plain numeric-only table, no
 // name column at all, rather than a fabricated placeholder name.
 //
-// SOUND - APPROXIMATED, DOCUMENTED: upstream's own real `Sound::
-// playPattern()` calls (the fire sound per weapon - `magnum_sound`/
-// `p90_sound`/`ak47_sound`/`rpg_sound`/`mg42_sound` - plus `blast_sound`,
-// `mob_death_sound`, `player_damage_sound`, `power_up`) are real multi-step
-// tracker envelopes this shim has no pattern/track engine for at all (an
-// already-documented scope limit - see this project's own CLAUDE.md).
-// Every one is approximated with a single representative `gbPlayNote()`
-// tone via `crabPlayWeaponSound()`/`crabPlayBlastSound()`/
-// `crabPlayMobDeathSound()`/`crabPlayDamageSound()`/`crabPlayPowerUpSound()`
-// below - the same "approximate with the closest one-shot primitive,
-// document the simplification" treatment established by gameFlappyBirdo.c/
-// gameUfoRace.c/gameShipwrek.c. Upstream's own real per-tick throttle for
-// the two automatic weapons (`if(((currentWeapon==1)||(currentWeapon==4))
-// &&(gb.frameCount%2)){ /* skip */ } else { playPattern(...); }` - silences
-// the fire sound on every other real tick for P90/MG42, to avoid a
-// continuous-beep effect) DOES have a real observable effect on audio
-// pacing even with only one representative tone, and is preserved exactly;
-// the real P90-specific `p90_alternative_sound` cancel-every-other-shot
-// waveform swap has no equivalent with only one representative tone and
-// was dropped outright (a strictly finer-grained simplification than the
-// frame-count throttle above, not the same thing).
+// SOUND - REAL, FULL RESTORATION: upstream's own real `Sound::
+// playPattern()` calls (the per-weapon fire sound - `magnum_sound`/
+// `p90_sound`/`ak47_sound`/`rpg_sound`/`mg42_sound` plus the P90's own
+// `p90_alternative_sound` - and `blast_sound`, `mob_death_sound`,
+// `player_damage_sound`, `power_up`) are ported verbatim onto this shim's
+// real pattern-engine primitive (`gbPlayPattern()`), not approximated -
+// every real upstream tracker-envelope hex/decimal value was copied
+// byte-for-byte from `Crabator.ino` into a `crab*Sound` array here (each
+// array's own element count, including its real 0x0000 terminator, was
+// checked against upstream's own literal array before trusting it), and
+// all 7 real upstream `playPattern()` call sites (weapon fire, the P90
+// alternate waveform, x2 blast, mob death, player damage, power-up) are
+// restored - none dropped. `weapons_sounds[]` (a real PROGMEM array of
+// PROGMEM pointers upstream) is ported as an if/else lookup function,
+// `crabWeaponSoundFor()`, returning the matching pattern array directly -
+// the same treatment `crabWeaponName()` above already uses for the
+// analogous `weapon_name[]` array-of-string-pointers, since a genuine
+// `int*[N]` array-of-array-pointers remains unverified in this dialect
+// (see that function's own comment). Every real call uses channel 0,
+// matching upstream exactly - upstream never calls `changePatternSet()`/
+// `changeInstrumentSet()` anywhere in this game, so channel 0 keeps this
+// shim's own real default square+noise instrument pair throughout, same
+// as real hardware's own default. Upstream's own real per-tick throttle
+// for the two automatic weapons (`if(((currentWeapon==1)||(currentWeapon
+// ==4))&&(gb.frameCount%2)){ /* skip */ } else { playPattern(...); }` -
+// silences the fire sound on every other real tick for P90/MG42, to
+// avoid a continuous-beep effect) and the P90-specific
+// `p90_alternative_sound` cancel-every-other-shot waveform swap
+// (`if(currentWeapon==1){ if(random()%2) playPattern(p90_alternative_
+// sound,0); }`, ported as `arand(2)`) are both restored exactly.
 //
 // SYSTEM INFO - PARTIALLY HONEST, PARTIALLY REAL: upstream's own System
 // Info pause-menu screen reads real hardware telemetry this shim has no
@@ -376,6 +385,27 @@ char* crabWeaponName( int i )
     if( i == 3 ) return "RPG";
     return "MG42";
 }
+
+// -----------------------------------------------------------------------
+// Sound pattern data - direct, byte-for-byte port of Crabator.ino's own
+// real tracker-envelope arrays (see gamebuinoShim.h's own Sound section
+// for gbPlayPattern()'s real format - a plain 0-terminated uint16 command/
+// note array). Every element, including the real 0x0000 terminator, was
+// checked against upstream's own literal array's own declared element
+// count before trusting it.
+// -----------------------------------------------------------------------
+
+int crabMagnumSound[6]          = { 0x0045, 0x7049, 0x017C, 0x784D, 0x042C, 0x0000 };
+int crabP90Sound[3]             = { 0x0045, 0x0154, 0x0000 };
+int crabP90AlternativeSound[3]  = { 0x0045, 0x014C, 0x0000 };
+int crabAk47Sound[3]            = { 0x0045, 0x012C, 0x0000 };
+int crabMg42Sound[7]            = { 0x0045, 0x0140, 0x8141, 0x7849, 0x788D, 0x052C, 0x0000 };
+int crabRpgSound[4]             = { 0x0045, 0x8101, 0x7F30, 0x0000 };
+int crabBlastSound[5]           = { 0x0045, 0x7849, 0x784D, 0x0A28, 0x0000 };
+int crabPowerUpSound[17]        = { 0x0005, 0x0140, 0x0150, 0x015C, 0x0170, 0x0180, 0x016C, 0x0154,
+                                     0x0160, 0x0174, 0x0184, 0x014C, 0x015C, 0x0168, 0x017C, 0x018C, 0x0000 };
+int crabMobDeathSound[3]        = { 0x0045, 0x0184, 0x0000 };
+int crabPlayerDamageSound[3]    = { 0x0045, 0x0564, 0x0000 };
 
 // -----------------------------------------------------------------------
 // Globals
@@ -719,22 +749,27 @@ void crabDrawMobs()
 
 // -----------------------------------------------------------------------
 // Sound helpers - see header comment on the real Sound::playPattern()
-// tracker envelopes these approximate with one representative tone each.
+// tracker envelopes, now ported verbatim onto gbPlayPattern().
 // -----------------------------------------------------------------------
 
-void crabPlayWeaponSound( int weapon )
+// Real upstream `weapons_sounds[currentWeapon]` (a PROGMEM array of
+// PROGMEM pattern pointers) - see this file's own header comment for why
+// this is an if/else lookup rather than an `int*[N]` array of array
+// pointers.
+int* crabWeaponSoundFor( int weapon )
 {
-    if( weapon == 0 ) gbPlayNote( 30, 6 );      // magnum
-    else if( weapon == 1 ) gbPlayNote( 65, 2 ); // P90
-    else if( weapon == 2 ) gbPlayNote( 55, 2 ); // AK47
-    else if( weapon == 3 ) gbPlayNote( 25, 8 ); // RPG launch
-    else gbPlayNote( 60, 2 );                   // MG42
+    if( weapon == 0 ) return crabMagnumSound;
+    if( weapon == 1 ) return crabP90Sound;
+    if( weapon == 2 ) return crabAk47Sound;
+    if( weapon == 3 ) return crabRpgSound;
+    return crabMg42Sound; // weapon == 4
 }
 
-void crabPlayBlastSound() { gbPlayNote( 20, 10 ); }
-void crabPlayMobDeathSound() { gbPlayNote( 45, 4 ); }
-void crabPlayDamageSound() { gbPlayNote( 35, 6 ); }
-void crabPlayPowerUpSound() { gbPlayNote( 75, 10 ); }
+void crabPlayWeaponSound( int weapon ) { gbPlayPattern( crabWeaponSoundFor( weapon ), 0 ); }
+void crabPlayBlastSound() { gbPlayPattern( crabBlastSound, 0 ); }
+void crabPlayMobDeathSound() { gbPlayPattern( crabMobDeathSound, 0 ); }
+void crabPlayDamageSound() { gbPlayPattern( crabPlayerDamageSound, 0 ); }
+void crabPlayPowerUpSound() { gbPlayPattern( crabPowerUpSound, 0 ); }
 
 // damageMob() - direct port of mobs.ino's own real function. Placed after
 // the sound helpers (needs crabPlayMobDeathSound()) and crabSetSplash()
@@ -827,6 +862,11 @@ void crabShoot()
                     }
                     else
                       crabPlayWeaponSound( crabCurrentWeapon );
+
+                    if( crabCurrentWeapon == 1 ) // P90 - cancel every other shot's buzz with an alternate waveform
+                    {
+                        if( arand( 2 ) ) gbPlayPattern( crabP90AlternativeSound, 0 );
+                    }
 
                     int recoil = crabWeaponPlayerRecoil[ crabCurrentWeapon ];
                     crabMoveXYDS( &crabPlayerX, &crabPlayerY, crabPlayerDir, -recoil );

@@ -93,13 +93,18 @@
 // literal here, so each line using one is an explicit `int[]` array - the
 // established precedent from gameTaquin.c/gameSmash.c.
 //
-// SOUND: upstream plays exactly two real one-shot notes (a flap and a
-// death), each immediately followed by three raw `gb.sound.command(...)`
-// tracker effects layering a pitch slide on top. `gbPlayNote(pitch,
-// duration)` carries the notes over unchanged (the channel argument drops -
-// this shim is single-channel); the `command()` calls are dropped, the same
-// already-documented scope limit as the rest of the real pattern/track
-// player (see gamebuinoShim.h's own header comment), not a new gap.
+// SOUND: upstream plays exactly two real notes (a flap and a death), each
+// on real channel 1, each followed by 2-3 raw `gb.sound.command(...)`
+// tracker effects (a flap's own volume/instrument/tremolo slides; a
+// death's own instrument/pitch-slide) - a real, faithful port of both via
+// this shim's own `gbSoundCommand()`/`gbPlayNoteChannel()` primitives (a
+// direct port of real Sound.h's own per-channel tracker commands),
+// preserving upstream's own real, literal call order (the note plays
+// first, the command() slides are issued right after it, not before).
+// The 4 identical real death-sound sites (a repeated
+// `playNote(1,28,1)`+2`command()`s+`alive=false;`+`lives--` block) are
+// still consolidated into one `aerKillPlayer()` helper, called from all 4
+// real sites.
 //
 // BLOCKING WIDGETS -> EXPLICIT STATES (gamePong.c's own established
 // treatment, and gameSmash.c's precedent for this exact menu shape):
@@ -500,10 +505,14 @@ bool aerPlayerHits( int x, int y, int* bitmap )
 }
 
 // The real, identical `playNote(1,28,1)` + 2 `command()`s + `alive = false;`
-// + `lives--` sequence upstream repeats at four separate death sites.
+// + `lives--` sequence upstream repeats at four separate death sites -
+// including upstream's own real, literal call order (the note plays
+// first, the two command() slides are issued right after it, not before).
 void aerKillPlayer()
 {
-    gbPlayNote( 1, 28 );
+    gbPlayNoteChannel( 1, 28, 1 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, 1, 0, 1 );
+    gbSoundCommand( GB_CMD_SLIDE, 7, -2, 1 );
     aerAlive = false;
     aerLives = aerLives - 1;
 }
@@ -1045,7 +1054,12 @@ void aerUpdateRunning()
 
     if( gbPressed( BTN_A ) || gbPressed( BTN_B ) )
     {
-        gbPlayNote( 5, 8 ); // the 3 real sound.command() slides drop - see header comment
+        // Real upstream call order: the note plays first, the 3 command()
+        // slides are issued right after it - see header comment.
+        gbPlayNoteChannel( 5, 8, 1 );
+        gbSoundCommand( GB_CMD_VOLUME, 4, 0, 1 );
+        gbSoundCommand( GB_CMD_INSTRUMENT, 1, 0, 1 );
+        gbSoundCommand( GB_CMD_TREMOLO, 8, 3, 1 );
         aerPlayerY = aerPlayerY - 1;
         aerPlayerGrav = aerPlayerGrav - 1;
     }

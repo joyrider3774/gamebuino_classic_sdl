@@ -77,19 +77,15 @@
 // 4. **Sound.** Upstream's own `PlaySoundFx()` used `gb.sound.command(...)`
 //    to set a per-note waveform/volume-slide/pitch-slide "FX Synth" preset
 //    (credited upstream to yodasvideoarcade.com) before calling
-//    `gb.sound.playNote(pitch, duration, channel)` - this shim only
-//    implements a flat `gbPlayNote(pitch, duration)` (real
-//    `Sound::command()`/pattern effects are out of scope for this
-//    project's first pass, see gamebuinoShim.h's own header comment).
-//    Ported as `gbPlayNote()` alone, using the exact same pitch/duration
-//    values upstream's own `soundfx[][]` table already stored (column 1 =
-//    pitch, column 7 = duration) - matching gameSimonbuino.c's own
-//    identical treatment of the same "FX Synth"-shaped preset table. Both
-//    real cues (letter pickup, game over) still play their correct note
-//    pitch, just without the slide/envelope flavor. `gb.pickRandomSeed()`
-//    became `gbPickRandomSeed()` (a documented no-op), and
-//    `gb.battery.show = false;` was dropped outright, matching every
-//    other port's own treatment of these two calls.
+//    `gb.sound.playNote(pitch, duration, channel)` - ported call-for-call
+//    via this shim's real `gbSoundCommand()`/`gbPlayNoteChannel()` tracker/
+//    pattern primitives as `sabcPlaySoundFx()`, matching
+//    gameSimonbuino.c's/gameBlocksBuino.c's own identical treatment of the
+//    same "FX Synth"-shaped preset table, always channel 0 (matching every
+//    real call site here, both of which pass `SND_FX_CHANNEL_1` = 0).
+//    `gb.pickRandomSeed()` became `gbPickRandomSeed()` (a documented
+//    no-op), and `gb.battery.show = false;` was dropped outright, matching
+//    every other port's own treatment of these two calls.
 //
 // 5. **The collectible letter itself.** Upstream already draws it as plain
 //    text (`gb.display.print(letters[letter_index])`, a single character -
@@ -250,18 +246,21 @@ enum SabcSoundFx
     SABC_FX_GAME_OVER = 1
 };
 
-// Verbatim pitch/duration columns from upstream's own soundfx[][] table
-// (column 1 = pitch, column 7 = duration) - see this file's own header
-// comment, point 4, for why the other columns (waveform/slide setup, no
-// shim equivalent) are dropped.
-int sabcSoundFx[2][8]= {
+// Verbatim copy of upstream's own soundfx[2][8] table.
+int sabcSoundFx[2][8] = {
     { 0, 45, 26, 1, 0, 1, 7, 10 }, // letter collected
     { 0, 30, 34, 10, 0, 1, 7, 25 } // game over
 };
 
+// Direct port of upstream's own PlaySoundFx(fxno, channel) - always
+// channel 0 here, matching every real call site in this game.
 void sabcPlaySoundFx( int fx )
 {
-    gbPlayNote( sabcSoundFx[ fx ][ 1 ], sabcSoundFx[ fx ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, sabcSoundFx[ fx ][ 6 ], 0, 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, sabcSoundFx[ fx ][ 0 ], 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, sabcSoundFx[ fx ][ 5 ], -sabcSoundFx[ fx ][ 4 ], 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, sabcSoundFx[ fx ][ 3 ], sabcSoundFx[ fx ][ 2 ] - 58, 0 );
+    gbPlayNoteChannel( sabcSoundFx[ fx ][ 1 ], sabcSoundFx[ fx ][ 7 ], 0 );
 }
 
 void sabcPlaySoundFxLetter()

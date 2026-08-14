@@ -39,11 +39,14 @@
 //
 // SOUND: real upstream's own one real non-one-shot call,
 // `gb.sound.playPattern(musique, 1)` (a short victory jingle played on
-// buying an upgrade), has no equivalent in this shim (only one-shot tones
-// are implemented - see this project's own Open Questions) - substituted
-// with `gbPlayOK()`, the same "one-shot tone stands in for a real pattern"
-// simplification already established for `gameArmageddon.c`/
-// `gameCopter.c`/`gameBomber.c`.
+// buying an upgrade), now plays for real via `gbPlayPattern()` - the real
+// tracker/pattern engine gamebuinoShim.c/.h now implements (see that
+// file's own Sound section header comment) - using the real, byte-for-
+// byte `musique[]` pattern data (`kebabMusique[]` here), on channel 1
+// exactly like upstream, through the real default square-wave instrument
+// (no `changeInstrumentSet()`/`command(CMD_INSTRUMENT,...)` call precedes
+// it upstream either, so the engine's own real per-channel default is
+// already correct).
 //
 // REAL EEPROM SAVE, REDESIGNED FOR THIS DIALECT'S FLAT `int` LAYOUT: real
 // upstream's own `sauvegarder()`/`restaurer()` do a raw byte-for-byte
@@ -262,11 +265,15 @@ bool kebabAcheter( int* bon, int prix )
     return false;
 }
 
+// Real upstream `musique[]` (rmkebab.ino) - a short victory jingle, copied
+// word-for-word, not hand-transcribed (see this file's own header comment).
+int kebabMusique[ 19 ] = { 0x438,0x238,0x234,0x838,0x238,0x240,0x248,0x240,0x838,0x424,0x224,0x22C,0x234,0x22C,0x424,0x438,0x434,0x838,0x000 };
+
 void kebabAcheterAmel()
 {
     if( kebabAcheter( &kebabNiveau, kebabPrixAmel() ) )
     {
-        gbPlayOK(); // stand-in for real upstream's own gb.sound.playPattern(musique,1) jingle - see this file's own header comment
+        gbPlayPattern( kebabMusique, 1 ); // real upstream's own gb.sound.playPattern(musique,1) jingle
         kebabBon0 = 0;
         kebabBon1 = 0;
         kebabBon2 = 0;

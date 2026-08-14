@@ -183,21 +183,16 @@
 // convention change, zero behavioral difference, since the function's own
 // body only ever reads two fields.
 //
-// SOUND - ONE-SHOT-TONE APPROXIMATION, an already-established scope limit
-// (see this project's own CLAUDE.md, and this same author's own already-
-// shipped gameCopter.c for the identical treatment): real
-// `playsoundfx(fxno, channel)` drives real `gb.sound.command()` calls to
-// shape volume/waveform/volume-slide/pitch-slide *before*
-// `gb.sound.playNote()` - this shim only implements one-shot tones
-// (`gbPlayNote`/`gbPlayTick`/`gbPlayOK`/`gbPlayCancel`), no tracker/command
-// system. `sfgtPlaysoundfx(fxno)` calls `gbPlayNote()` directly with the
-// real table's own pitch/duration values only (`sfgtSoundFx[fxno][1]`/
-// `[7]`), dropping the volume/waveform/slide shaping and the per-call
-// `channel` parameter (always 0 upstream anyway - this shim has no
-// multi-channel concept). Real upstream's own third sound effect (index 2,
-// "mort selon jerom" - a death/KO stinger) is preserved and used exactly
-// where upstream calls it (`gestionAttack()`, the instant a defeated
-// fighter's life first reaches 0).
+// SOUND - a faithful, byte-for-byte port of real `playsoundfx(fxno, channel)`:
+// `sfgtPlaysoundfx(fxno)` drives the real volume/instrument/volume-slide/
+// arpeggio `gb.sound.command()` shaping calls (`GB_CMD_VOLUME`/
+// `GB_CMD_INSTRUMENT`/`GB_CMD_SLIDE`/`GB_CMD_ARPEGGIO`) in upstream's own
+// exact order before `gbPlayNoteChannel()`, all on channel 0 (upstream's own
+// `playsoundfx()` takes a `channel` parameter, but every real call site in
+// this game always passes 0). Real upstream's own third sound effect (index
+// 2, "mort selon jerom" - a death/KO stinger) is used exactly where upstream
+// calls it (`gestionAttack()`, the instant a defeated fighter's life first
+// reaches 0).
 //
 // BYTE WRAPAROUND, NOT REPRODUCED - a whole-project simplification already
 // documented once for the whole codebase (see gameCastleDefence.c's own
@@ -1515,7 +1510,11 @@ bool sfgtAddToCombo( SfgtFighter* player, int moveTouch )
 
 void sfgtPlaysoundfx( int fxno )
 {
-    gbPlayNote( sfgtSoundFx[ fxno ][ 1 ], sfgtSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, sfgtSoundFx[ fxno ][ 6 ], 0, 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, sfgtSoundFx[ fxno ][ 0 ], 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, sfgtSoundFx[ fxno ][ 5 ], -sfgtSoundFx[ fxno ][ 4 ], 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, sfgtSoundFx[ fxno ][ 3 ], sfgtSoundFx[ fxno ][ 2 ] - 58, 0 );
+    gbPlayNoteChannel( sfgtSoundFx[ fxno ][ 1 ], sfgtSoundFx[ fxno ][ 7 ], 0 );
 }
 
 // -----------------------------------------------------------------------------

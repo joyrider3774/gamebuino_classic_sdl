@@ -84,15 +84,17 @@
 // entry below it down one rank.
 //
 // Real upstream's own `PlaySoundFx()` drives the tracker directly via
-// `gb.sound.command()` (per-channel waveform/volume-slide/pitch-slide
-// parameters) - only ever invoked upstream for the game-over cue (the
-// invader-hit dispatch call is commented out in the real `sounds.ino`, so
-// invader hits are genuinely silent on real hardware too). This shim only
-// ports representative one-shot tones (see gamebuinoShim.h's own header
-// comment and this project's own open "Sound" question) with no
-// `command()`-level primitive at all, so the game-over cue uses this
-// project's own established closest substitute for a "you lost" cue,
-// `gbPlayCancel()`, instead of reproducing the exact custom waveform.
+// `gb.sound.command()` (per-channel volume/waveform/volume-slide/pitch-slide
+// parameters) - only ever invoked upstream for the game-over cue
+// (`SND_FX_GAME_OVER`, index 8 of the real 9-row `soundfx[9][8]` table,
+// channel 0; the invader-hit dispatch call is commented out in the real
+// `sounds.ino`, so invader hits are genuinely silent on real hardware too,
+// and player-shoot uses real upstream's own literal `gb.sound.playTick()`
+// call, not the tracker at all). `sbuinoPlaySoundFxGameOver()` is now a
+// direct, faithful port of real `PlaySoundFx()` via this shim's own
+// `gbSoundCommand()`/`gbPlayNoteChannel()` primitives - the full real 9-row
+// table is copied verbatim (only row 8 is ever actually read, same as real
+// upstream, but every row is kept for fidelity with the real source file).
 //
 // Three real, verified upstream bugs. The first two below were found and
 // fixed (not preserved) once flagged as genuine negative player-experience
@@ -324,11 +326,47 @@ void sbuinoUpdateGameScore( int value, bool combo )
 }
 
 // -----------------------------------------------------------------------------
-// Sound
+// Sound - real soundfx[9][8] table, copied verbatim (only row 8,
+// SND_FX_GAME_OVER, is ever actually read by real upstream - see this
+// file's own header comment).
 // -----------------------------------------------------------------------------
+
+#define SBUINO_SND_FX_CHANNEL_1 0
+
+#define SBUINO_SND_FX_GAME_OVER 8
+
+int sbuinoSoundFx[9][8] =
+{
+    { 1, 57, 57,  1, 1, 1, 5,  6 }, // 0 = player shoot (unused - real upstream uses playTick() instead)
+    { 0,  0, 68,  1, 0, 0, 7,  4 }, // 1 = invader hit 1 (unused - real dispatch call is commented out upstream)
+    { 1, 15, 57,  1, 1, 2, 7, 15 }, // 2 = invader hit 2 (unused upstream)
+    { 0, 10, 60,  1, 0, 0, 7,  6 }, // 3 = saucer (unused upstream)
+    { 0,  5, 58,  0, 1, 5, 5,  2 }, // 4 = invaders 1 (unused upstream)
+    { 0,  4, 58,  0, 1, 5, 5,  2 }, // 5 = invaders 2 (unused upstream)
+    { 0,  2, 58,  0, 1, 5, 5,  2 }, // 6 = invaders 3 (unused upstream)
+    { 0,  1, 58,  0, 1, 5, 5,  2 }, // 7 = invaders 4 (unused upstream)
+    { 0, 30, 34, 10, 0, 1, 7, 25 }, // 8 = SND_FX_GAME_OVER (the only row real upstream ever reads)
+};
+
+// Direct port of real PlaySoundFx() - every real gb.sound.command() call
+// restored via gbSoundCommand(), followed by the real final
+// gbPlayNoteChannel(pitch, duration, channel).
+void sbuinoPlaySoundFx( int fxno, int channel )
+{
+    gbSoundCommand( GB_CMD_VOLUME, sbuinoSoundFx[fxno][6], 0, channel );
+    gbSoundCommand( GB_CMD_INSTRUMENT, sbuinoSoundFx[fxno][0], 0, channel );
+    gbSoundCommand( GB_CMD_SLIDE, sbuinoSoundFx[fxno][5], -sbuinoSoundFx[fxno][4], channel );
+    gbSoundCommand( GB_CMD_ARPEGGIO, sbuinoSoundFx[fxno][3], sbuinoSoundFx[fxno][2] - 58, channel );
+    gbPlayNoteChannel( sbuinoSoundFx[fxno][1], sbuinoSoundFx[fxno][7], channel );
+}
 
 void sbuinoPlaySoundFxPlayerShoot()
 {
+    // Real upstream's own PlaySoundFxPlayerShoot() itself calls
+    // gb.sound.playTick(), not the tracker - the commented-out
+    // PlaySoundFx(SND_FX_PLAYER_SHOOT,...) call right below it in real
+    // sounds.ino is genuinely dead code, not something this port is
+    // approximating.
     gbPlayTick();
 }
 
@@ -340,10 +378,7 @@ void sbuinoPlaySoundFxInvaderHit()
 
 void sbuinoPlaySoundFxGameOver()
 {
-    // See header comment - no gb.sound.command() equivalent exists in this
-    // shim, so this uses the project's own established closest one-shot
-    // substitute for a "you lost" cue.
-    gbPlayCancel();
+    sbuinoPlaySoundFx( SBUINO_SND_FX_GAME_OVER, SBUINO_SND_FX_CHANNEL_1 );
 }
 
 // -----------------------------------------------------------------------------

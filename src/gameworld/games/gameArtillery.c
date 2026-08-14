@@ -62,14 +62,12 @@
 // identical, since nothing reads those config vars while the title screen
 // is up either way.
 //
-// SOUND: `outpt_soundfx()` configures a waveform + volume-slide + pitch-
-// slide via real `gb.sound.command(...)` before calling `playNote()` - this
-// shim only ports the one-shot `playNote()`/`playTick()`/`playOK()`/
-// `playCancel()` tones (see gamebuinoShim.h's own documented scope; the
-// full pattern/track/command() player is out of scope project-wide, not
-// specific to this game). `artPlaySoundFx()` calls `gbPlayNote()` directly
-// with `artSoundFx[][]`'s own real pitch/duration fields, producing a
-// plain tone at the right pitch without the slide effects.
+// SOUND: `artPlaySoundFx()` is a direct, byte-for-byte port of real
+// upstream's own `outpt_soundfx(byte fxno)` - the same 4
+// `gbSoundCommand()` calls (volume/instrument/slide/arpeggio, always
+// channel 0, matching upstream's own hardcoded `0` argument throughout)
+// plus a final `gbPlayNoteChannel()`, against the existing `artSoundFx[][]`
+// table.
 //
 // PRESERVED REAL UPSTREAM BUGS (kept exactly as shipped, matching this
 // project's own default per CLAUDE.md):
@@ -354,9 +352,16 @@ void artLandscapeSet( int x, int y, int v )
 // Sound (see this file's own header comment - "SOUND")
 // -----------------------------------------------------------------------------
 
+// Direct port of real upstream's own `void outpt_soundfx(byte fxno)` -
+// always channel 0, matching every one of that function's own real
+// gb.sound.command()/playNote() calls exactly.
 void artPlaySoundFx( int fxno )
 {
-    gbPlayNote( artSoundFx[ fxno ][ 1 ], artSoundFx[ fxno ][ 7 ] );
+    gbSoundCommand( GB_CMD_VOLUME, artSoundFx[ fxno ][ 6 ], 0, 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, artSoundFx[ fxno ][ 0 ], 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, artSoundFx[ fxno ][ 5 ], -artSoundFx[ fxno ][ 4 ], 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, artSoundFx[ fxno ][ 3 ], artSoundFx[ fxno ][ 2 ] - 58, 0 );
+    gbPlayNoteChannel( artSoundFx[ fxno ][ 1 ], artSoundFx[ fxno ][ 7 ], 0 );
 }
 
 // -----------------------------------------------------------------------------

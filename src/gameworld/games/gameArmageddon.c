@@ -97,24 +97,16 @@
 // no separate mask/fill array or GRAY fill drawn underneath it anywhere in
 // the real source.
 //
-// SOUND - APPROXIMATED, DOCUMENTED (an already out-of-scope area, not a
-// shim gap being newly flagged): upstream's own `sound.ino` calls a real
-// low-level `gb.sound.command(CMD_VOLUME, ...)/command(CMD_SLIDE, ...)/
-// command(CMD_ARPEGGIO, ...)/command(CMD_INSTRUMENT, ...)` sequence before
-// every single `playNote()` call - a generic tracker-style command/
-// arpeggio/instrument API this shim has no equivalent for at all (only
-// one-shot `gbPlayNote`/`gbPlayTick`/`gbPlayOK`/`gbPlayCancel` exist - a
-// documented scope limit, not something newly missing). `armaPlaySound()`
-// below keeps upstream's own real per-effect pitch/duration pair from its
-// `sounds[][5]` table (columns 0/1 = wave/pitch... actually column 1 =
-// pitch, column 2 = duration - the two values `gbPlayNote(pitch,duration)`
-// can actually express) and calls `gbPlayNote()` directly with them,
-// dropping only the wave-shape/arpeggio columns this shim has no primitive
-// for - the same "approximate with the closest one-shot primitive, keep
-// whatever real parameters do carry over" treatment gameUfoRace.c's own
-// sound already established, just carrying over pitch+duration instead of
-// falling back to a single representative `gbPlayOK()`-style tone, since
-// gbPlayNote() lets this port keep more real fidelity than that.
+// SOUND - a faithful, byte-for-byte port of real `playSound(i)`: `armaSounds`
+// is upstream's own real `sounds[][5]` wave/pitch/duration/arpeggio-step-
+// duration/arpeggio-step-size table, and `armaPlaySound()` drives the same
+// real `gb.sound.command(CMD_VOLUME,5,0,...)/command(CMD_SLIDE,0,0,...)/
+// command(CMD_ARPEGGIO,...)/command(CMD_INSTRUMENT,...)` sequence before
+// `gbPlayNoteChannel()`, in upstream's own exact order, all on channel 0.
+// Real upstream's own `initSound()` (setting the same VOLUME/SLIDE commands
+// once at startup) is genuine dead code - never called anywhere in the real
+// source - and was not ported, since `playSound()` already re-sends both of
+// those same two commands on every single call.
 //
 // HIGHSCORE NAME ENTRY - DROPPED, DOCUMENTED (matching an exact existing
 // precedent, not a new gap): upstream's own `gb.getDefaultName(tmp_name)` +
@@ -225,12 +217,12 @@
 // `gbDrawLine()`/`gbDrawPixel()`/`gbDrawCircle()` all take `int` - the same
 // treatment gameCatcher.c's own sprite-position casts already established).
 //
-// SHIM GAPS: none found beyond the two already-documented, deliberately
-// out-of-scope areas above (the sound command/arpeggio/instrument API, and
-// on-screen keyboard text entry) - every other primitive this port needed
-// (`gbDrawBitmap`, `gbRepeat`, `gbDrawChar`'s underlying `gbPrintString`,
-// `eeprom_read_byte`/`eeprom_write_byte`, `atan2`/`cos`/`sin`/`sqrt` via the
-// globally-included `math.h`) already existed and worked as documented.
+// SHIM GAPS: none found beyond the already-documented, deliberately
+// out-of-scope on-screen keyboard text entry above - every other primitive
+// this port needed (`gbDrawBitmap`, `gbRepeat`, `gbDrawChar`'s underlying
+// `gbPrintString`, `eeprom_read_byte`/`eeprom_write_byte`, `atan2`/`cos`/
+// `sin`/`sqrt` via the globally-included `math.h`, and now the real sound
+// command/tracker engine) already existed and worked as documented.
 
 #define ARMA_TARGET_SPEED 3
 
@@ -296,18 +288,15 @@ float armaEMissileY[ARMA_MAX_EMISSILES];
 int armaHighscores[ARMA_NUM_HIGHSCORES];
 
 // Wave/pitch/duration/arpeggio-step-duration/arpeggio-step-size, copied
-// verbatim from upstream's own real sound.ino `sounds[][5]` table - only
-// columns 1 (pitch) and 2 (duration) have a real gbPlayNote() equivalent
-// here (see this file's own header comment on the dropped command/
-// arpeggio/instrument API).
-int armaSounds[6][2] =
+// verbatim from upstream's own real sound.ino `sounds[][5]` table.
+int armaSounds[6][5] =
 {
-    {20, 5}, // player launch
-    {25, 5}, // enemy launch
-    {10, 5}, // detonating enemy missile
-    {10, 2}, // score pips
-    {2, 10}, // a city dies
-    {20, 14}, // lose
+    {0, 20, 5, 1, 1}, // player launch
+    {0, 25, 5, 1, -1}, // enemy launch
+    {1, 10, 5, 1, -1}, // detonating enemy missile
+    {1, 10, 2, 0, 0}, // score pips
+    {1, 2, 10, 1, -1}, // a city dies
+    {0, 20, 14, 3, -1}, // lose
 };
 
 #define ARMA_SOUND_PLAUNCH 0
@@ -371,7 +360,11 @@ int armaDeadLauncherBitmap[10] =
 
 void armaPlaySound( int idx )
 {
-    gbPlayNote( armaSounds[ idx ][ 0 ], armaSounds[ idx ][ 1 ] );
+    gbSoundCommand( GB_CMD_VOLUME, 5, 0, 0 );
+    gbSoundCommand( GB_CMD_SLIDE, 0, 0, 0 );
+    gbSoundCommand( GB_CMD_ARPEGGIO, armaSounds[ idx ][ 3 ], armaSounds[ idx ][ 4 ], 0 );
+    gbSoundCommand( GB_CMD_INSTRUMENT, armaSounds[ idx ][ 0 ], 0, 0 );
+    gbPlayNoteChannel( armaSounds[ idx ][ 1 ], armaSounds[ idx ][ 2 ], 0 );
 }
 
 // -----------------------------------------------------------------------------

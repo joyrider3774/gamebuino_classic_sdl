@@ -156,14 +156,20 @@
 //    `spinRetryPrompt`/`spinPausePrompt`/`spinUnlockYes`/`spinUnlockNo`
 //    below), the same treatment those two files already established.
 //
-// SOUND - APPROXIMATED, DOCUMENTED (an already out-of-scope area, not a
-// new shim gap): upstream's own single non-one-shot sound call,
-// `gb.sound.playPattern(destroy, 0)` on a wall hit (a real, if tiny,
-// 5-note PROGMEM pattern), has no equivalent in this shim (only one-shot
-// `gbPlayNote`/`gbPlayTick`/`gbPlayOK`/`gbPlayCancel` exist). Approximated
-// with a single representative `gbPlayNote()` low-pitched hit tone at
-// that same real call site, matching this project's own established
-// "approximate with the closest one-shot primitive" convention.
+// SOUND - GENUINELY RESTORED, not approximated: upstream's own single
+// non-one-shot sound call, `gb.sound.playPattern(destroy, 0)` on a wall
+// hit, is ported directly via the shim's own real tracker-engine
+// `gbPlayPattern()` primitive against `spinDestroyPattern` (the real,
+// verbatim `destroy[]` PROGMEM word array from spin.ino - 4 note/command
+// words plus the real 0x0000 pattern terminator, matching upstream's own
+// declared 5-word length exactly). No `gbChangePatternSet()`/
+// `gbChangeInstrumentSet()` call is needed on channel 0 for this: the
+// pattern array is played directly rather than looked up by ID, and an
+// untouched channel already carries the real default square/noise
+// instrument pair. `gb.sound.playOK()`/`playCancel()`/`playTick()`
+// (Joueur.ino/menu.ino/credits.ino) are already real one-shot primitives
+// with a direct `gbPlayOK()`/`gbPlayCancel()`/`gbPlayTick()` equivalent,
+// so those call sites needed no change.
 //
 // gb.pickRandomSeed()/random() are never called anywhere in this real
 // game (it's entirely deterministic - hand-designed levels, no
@@ -557,6 +563,17 @@ char spinPausePrompt[22] = { 21, 77, 101, 110, 117, 32, 22, 82, 101, 116, 114, 1
 char spinUnlockYes[16] = { 21, 76, 101, 116, 39, 115, 32, 100, 111, 32, 116, 104, 105, 115, 33, 0 };
 char spinUnlockNo[9] = { 22, 78, 111, 32, 119, 97, 121, 33, 0 };
 
+// Real `destroy[]` pattern (spin.ino) - a tiny 4-note, 0-terminated
+// tracker pattern played on a wall hit via real `gb.sound.playPattern(
+// destroy, 0)`. Copied verbatim from upstream's own real word values
+// (`0x8045,0x8891,0x8241,0x0608,0x0000` - the trailing 0x0000 is the real
+// pattern terminator), not re-derived - channel 0 needs no
+// gbChangePatternSet()/gbChangeInstrumentSet() call first, since
+// gbPlayPattern() takes this array directly rather than looking it up by
+// ID, and a channel with no instrument set of its own already gets the
+// real default square/noise pair.
+int spinDestroyPattern[5] = { 0x8045, 0x8891, 0x8241, 0x0608, 0x0000 };
+
 // ---- end of generated data section ----
 
 // ---- flattened Joueur state ----
@@ -789,7 +806,7 @@ void spinCollisionsJoueur( int springs )
         if( spinTestCollisionsJoueur( 0, 1, 0 ) )
         {
             spinHit = 1;
-            gbPlayNote( 40, 20 );
+            gbPlayPattern( spinDestroyPattern, 0 );
         }
 
         if( spinHit > 0 )
