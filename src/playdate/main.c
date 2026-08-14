@@ -1209,6 +1209,18 @@ static void syncEngineFrameRateToGame()
 
 static void returnToMenu()
 {
+    // md_stopTone() alone only clears the one-shot voice pool (gbPlayTick()/
+    // OK()/Cancel()) - the tracker engine's own per-channel state
+    // (gbTrackIsPlaying[]/gbPatternIsPlaying[]/gbNotePlaying[]/
+    // gbActiveVoice[]) isn't reset by it at all, so a game quit mid-track
+    // would otherwise leave that state dangling. This port has no
+    // gamesMain.c-style quit-confirmation dispatch loop of its own (see
+    // this file's own header comment) - returnToMenu() is the one real
+    // place both real ways off doing so (the A+B+Up+Right chord and the
+    // system-menu "Menu" item, both wrapping this same function) actually
+    // leave a game, so the fix lives here directly, matching the identical
+    // one already made in gamesMain.c for the SDL2/SDL3 ports.
+    gbStopTrackAll();
     md_stopTone();
     gCurrentGameIndex = -1;
     pd->system->removeAllMenuItems();
