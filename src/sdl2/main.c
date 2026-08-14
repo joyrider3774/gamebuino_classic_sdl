@@ -9,11 +9,15 @@
 // below for the exact flags kept) - with this project's own real Button A
 // (not "Fire") and ".gbu" stub-file naming (not ".joy").
 //
-// md_endFrame() is called unconditionally at the bottom of every real
-// frame, matching the sibling Vircon32 build's own main() exactly -
-// gamebuinoShim.c's own gbUpdate()/gbRenderFrame() decide for themselves
-// (via the fixed 20fps-by-default accumulator) whether this particular
-// real tick actually redraws anything.
+// md_endFrame() is called unconditionally, exactly once, at the bottom of
+// every real frame - the sole real present call in this whole file.
+// gamebuinoShim.c's own gbUpdate()/gbRenderFrame() (via the fixed
+// 20fps-by-default accumulator) decide for themselves whether this
+// particular real tick actually draws anything new into the backing
+// surface, but never call md_endFrame() themselves - see gbRenderFrame()'s
+// own doc comment in gamebuinoShim.c for why a second present from there
+// would be a real, measurable bug on a vsync-locked port, not just
+// redundant work.
 // -----------------------------------------------------------------------------
 
 #if defined _WIN32 || defined __CYGWIN__

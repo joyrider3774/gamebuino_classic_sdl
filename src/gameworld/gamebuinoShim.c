@@ -888,10 +888,28 @@ bool gbUpdate()
     return true;
 }
 
-// Streams the framebuffer to the real screen via md_drawColumn() (and, for
-// any real GB_GRAY content, a second targeted md_drawColumnGray() pass) -
-// call once, at the very end of a game's own update function, after all of
-// that tick's drawing is done.
+// Streams the framebuffer to the real screen's backing surface via
+// md_drawColumn() (and, for any real GB_GRAY content, a second targeted
+// md_drawColumnGray() pass) - call once, at the very end of a game's own
+// update function, after all of that tick's drawing is done.
+//
+// Deliberately does NOT call md_endFrame() itself - every port's own
+// top-level per-real-frame loop (main.c on SDL2/SDL3, update() on
+// Playdate) already calls md_endFrame() exactly once, unconditionally,
+// after that real frame's dispatch is done, regardless of whether this
+// particular tick's gbUpdate() gate actually ran a game logic tick at all
+// (md_endFrame() itself is written to gracefully re-present the backing
+// surface's already-persistent last content on a tick with nothing new to
+// draw - see e.g. sdlBackend.c's own md_endFrame() doc comment). A second,
+// real present from inside gbRenderFrame() itself would be a genuine
+// duplicate - on a vsync-locked port this is not just wasted work but a
+// second real vsync-blocking stall per logic tick, which compounds badly
+// with the fixed-timestep accumulator driving that same outer loop: the
+// extra measured wall-clock cost per outer iteration inflates the very
+// elapsed-time sample that accumulator feeds on, queuing up even more
+// catch-up ticks (and therefore even more duplicate presents) next
+// iteration - a real, self-reinforcing slowdown, worse the more often a
+// game's own requested frame rate makes this gate fire true.
 void gbRenderFrame()
 {
     gbUpdatePopup(); // real hardware's own automatic tail-of-update() call - see gbPopup()'s own doc comment
@@ -916,8 +934,6 @@ void gbRenderFrame()
               md_drawColumnGray( col, page, grayValue );
           }
     }
-
-    md_endFrame();
 }
 
 // -----------------------------------------------------------------------------
