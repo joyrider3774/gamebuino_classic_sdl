@@ -53,6 +53,16 @@ own [BUGS.md](https://github.com/joyrider3774/gamebuino_classic_vircon32/blob/ma
 for the full list of what's deliberately preserved vs. what was fixed and
 why.
 
+The shared `gameworld/gamebuinoShim.c` sound engine is a real port of the
+actual tracker/pattern/track engine (notes, patterns, tracks, and
+instrument envelopes/slide/arpeggio/tremolo commands), not just one-shot
+tones - with one real, documented gap carried over from the sibling
+project unchanged: **there is no noise instrument.** Real hardware drives
+its speaker from a genuine pseudorandom noise generator for any
+instrument step flagged as noise (e.g. `playTick()`); this port has no
+noise waveform at all, so a noise-flagged step plays as a plain tone at
+the same pitch/duration instead.
+
 The platform layer itself - window/input/audio/rendering, the menu, the
 CLI, and EEPROM persistence - is new, built directly against SDL3, reusing
 infrastructure and technique from the same author's `Tinyjoypad_SDL`
@@ -173,6 +183,12 @@ a genuinely incomplete upstream source, or a known bug like a ball that
 can get stuck). They're still fully selectable and playable like any
 other game, just flagged.
 
+The table also includes **Sound Test**, which uses the same red-text
+flagging but for a different reason: it's not a ported game at all, just
+an in-cartridge diagnostic tool for exercising the sound shim's own
+primitives directly (`playOK()`/`playCancel()`/`playTick()`, a raw pitch
+sweep, and a few instrument/volume/slide extras).
+
 | Game | Author | License | Save | Source | Screenshot |
 |---|---|---|---|---|---|
 | 101 Starships | Zoglu | None | — | zoglu.net (no stable link) | [<img src="metadata/screenshots/101 STARSHIPS.png" width="80">](<metadata/screenshots/101%20STARSHIPS.png>) |
@@ -256,6 +272,7 @@ other game, just flagged.
 | Snake Classic | Ripper121 (original), Tnxec2 (fork) | None | — | [snake gamebuino classic](https://github.com/Tnxec2/snake-gamebuino-classic) | [<img src="metadata/screenshots/SNAKE CLASSIC.png" width="80">](metadata/screenshots/SNAKE%20CLASSIC.png) |
 | Sokobuino | martinsustek | None | ✅ | Recovered via direct download (no stable link) | [<img src="metadata/screenshots/SOKOBUINO.png" width="80">](metadata/screenshots/SOKOBUINO.png) |
 | Solitaire | Andy O'Neill | MIT | ✅ | [gamebuino solitaire](https://github.com/aoneill01/gamebuino-solitaire) | [<img src="metadata/screenshots/SOLITAIRE.png" width="80">](metadata/screenshots/SOLITAIRE.png) |
+| Sound Test | willems davy | GPLv3 (this project's own code) | — | Not a ported game - a sound-shim diagnostic tool, see above | [<img src="metadata/screenshots/SOUND TEST.png" width="80">](<metadata/screenshots/SOUND%20TEST.png>) |
 | Spin Spin Spinbuino! | Charly Piva "Zoglu" / Margot Piva "Isil" | None | ✅ | zoglu.net (no stable link) | [<img src="metadata/screenshots/SPIN SPIN SPINBUINO!.png" width="80">](<metadata/screenshots/SPIN%20SPIN%20SPINBUINO!.png>) |
 | Star Honor | Wenceslao Villanueva Jr (original) / wuuff (Gamebuino port) | MIT | — | [StarHonor](https://github.com/wuuff/StarHonor) | [<img src="metadata/screenshots/STAR HONOR.png" width="80">](<metadata/screenshots/STAR%20HONOR.png>) |
 | StickFighter | Clement83 (art by Quirby64) | None | — | [StickFighter](https://github.com/Clement83/StickFighter) | [<img src="metadata/screenshots/STICKFIGHTER.png" width="80">](metadata/screenshots/STICKFIGHTER.png) |
