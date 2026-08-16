@@ -184,6 +184,18 @@ void gamesMain_dispatchFrame()
         prevConfirmLeft = md_inputLeft();
         prevConfirmRight = md_inputRight();
         prevConfirmA = md_inputA();
+        // Stop audio the instant the dialog opens, not only once the
+        // player actually confirms - the current game's own update() (and
+        // therefore gbUpdateSoundTracker()) stops running entirely the
+        // moment confirmingQuit is true, so nothing will restart this
+        // while the dialog is up. If the player cancels instead, onResume()
+        // (if the game defines one) or that game's own per-tick "restart
+        // background music if it's not still playing" logic (several
+        // already-shipped games have this, e.g. 101Starships) naturally
+        // picks it back up once real gameplay updates resume - this isn't
+        // a pause/resume mechanism, just an honest stop.
+        gbStopTrackAll();
+        md_stopTone();
         drawConfirmQuitDialog();
     }
     else if( currentGameIndex == -1 )
