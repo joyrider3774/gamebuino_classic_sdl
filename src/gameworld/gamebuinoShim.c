@@ -1592,21 +1592,35 @@ void gbPlayNote( int pitch, int duration )
 // each plays as a single short overlapping 2-note chord (a rising/falling
 // octave dyad, since 517.63/258.82 = 2.0 exactly) rather than a true
 // two-step melody.
+// Real playOKPattern/playCancelPattern/playTickP (Sound.cpp) - each word is
+// either a NOTE (pitch<<2 | duration<<8) or a COMMAND (bit0 set), decoded by
+// hand against the real bit layout gbSoundCommand()/gbUpdatePatternChannel()
+// both already implement: 0x0005 selects instrument 0 (square), 0x0045
+// selects instrument 1 (noise), 0x0138 is NOTE(pitch=14,duration=1), 0x0168
+// is NOTE(pitch=26,duration=1). Real playOK() plays pitch14-then-pitch26 as
+// a genuine two-note SEQUENCE (not a simultaneous chord); playCancel() is
+// the exact same two notes in reverse order - the two only actually sound
+// different from each other because they're sequenced in time, matching
+// real `Sound::playOK()`/`playCancel()`, both of which call
+// `playPattern(...,0)` directly. Mirrors the identical fix in the sibling
+// gamebuino_classic_vircon32 project's own gamebuinoShim.c.
+int gbPlayOKPattern[4]     = { 0x0005, 0x0138, 0x0168, 0x0000 };
+int gbPlayCancelPattern[4] = { 0x0005, 0x0168, 0x0138, 0x0000 };
+int gbPlayTickPattern[3]   = { 0x0045, 0x0168, 0x0000 };
+
 void gbPlayTick()
 {
-    md_playTone( 517.63, 1.0 / (float)gbFrameRateFps );
+    gbPlayPattern( gbPlayTickPattern, 0 );
 }
 
 void gbPlayOK()
 {
-    md_playTone( 258.82, 1.0 / (float)gbFrameRateFps );
-    md_playTone( 517.63, 1.0 / (float)gbFrameRateFps );
+    gbPlayPattern( gbPlayOKPattern, 0 );
 }
 
 void gbPlayCancel()
 {
-    md_playTone( 517.63, 1.0 / (float)gbFrameRateFps );
-    md_playTone( 258.82, 1.0 / (float)gbFrameRateFps );
+    gbPlayPattern( gbPlayCancelPattern, 0 );
 }
 
 // -----------------------------------------------------------------------------

@@ -405,6 +405,23 @@ static void screenshotCustomFifteen()
     screenshotWait( 30 );
 }
 
+// SOUND TEST opens directly into its own diagnostic UI (no title/menu
+// screen to dismiss at all) - 3 real Down taps move the selection off the
+// default playOK() entry onto the "pitch 0" pitch-sweep entry, then one A
+// tap triggers it, so the capture shows the tool's own full UI (the
+// selected label plus its predicted-frequency line), not just the bare
+// default screen.
+static void screenshotCustomSoundTest()
+{
+    for( int i = 0; i < 3; i++ )
+    {
+        screenshotTapDir( false, true, false, false );
+        screenshotWait( 10 );
+    }
+    screenshotTapButton( SS_BUTTON_A );
+    screenshotWait( 15 );
+}
+
 static ScreenshotScript screenshotScriptFor( char* title )
 {
     ScreenshotScript s = { SS_DEFAULT_TAPS, SS_DEFAULT_GAP, 0, false, false, false, false, SS_BUTTON_A, NULL };
@@ -686,6 +703,8 @@ static ScreenshotScript screenshotScriptFor( char* title )
       s.custom = screenshotCustomStarHonor;
     else if( SDL_strcmp( title, "FIFTEEN" ) == 0 )
       s.custom = screenshotCustomFifteen;
+    else if( SDL_strcmp( title, "SOUND TEST" ) == 0 )
+      s.custom = screenshotCustomSoundTest;
 
     return s;
 }

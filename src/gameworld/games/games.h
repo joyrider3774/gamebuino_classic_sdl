@@ -318,4 +318,7 @@ void gameTrexQuest_update();
 void gameShootBuino_init();
 void gameShootBuino_update();
 
+void gameSoundTest_init();
+void gameSoundTest_update();
+
 #endif
