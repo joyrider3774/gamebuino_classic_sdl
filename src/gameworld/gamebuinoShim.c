@@ -964,8 +964,26 @@ void gbRenderFrame()
 // real sound_data.h note-name header: NOTE_C3=14, NOTE_C4=26 - a real
 // octave apart, exactly matching playOK()'s own two real notes below and
 // this table's own halfPeriod-doubling relationship between those two
-// indices). Real audible frequency = 15000 / (2*halfPeriod) -
-// Sound::generateOutput()'s own documented real 15kHz ISR rate.
+// indices). Real audible frequency = GB_SOUND_ISR_HZ / (2*halfPeriod).
+//
+// GB_SOUND_ISR_HZ is the real Timer1 compare-match ISR rate that drives
+// Sound::generateOutput() - 16000000 / (280+1) = 16MHz (real hardware's
+// own confirmed CPU clock - see Simbuino, a real cycle-accurate AVR
+// simulator, whose own AtmelProcessor.cs hardcodes
+// `public const int ClockSpeed = 16000000`) divided by real CTC-mode
+// OCR1A+1 (Sound::begin()'s own `OCR1A=280; TCCR1B|=(1<<WGM12);
+// TCCR1B|=(1<<CS10);` - CTC mode, prescaler 1, so one real ISR fires every
+// OCR1A+1=281 clock cycles). NOT the "15000 times per second" a real
+// source comment in Sound.cpp itself states (a real, confirmed-wrong
+// approximation in the comment, not the code) - the sibling
+// gamebuino_classic_vircon32 project originally trusted that comment at
+// face value, but a live user-recorded comparison against Simbuino's own
+// real audio output (both playing 101Starships' own real background
+// music) measured every dominant frequency consistently ~3.8x higher on
+// Simbuino than that shim produced - matching 56939.5/15000=3.796 to
+// within 0.08%, decisively confirming the comment (not the derivation
+// from real register values) was the actual error.
+#define GB_SOUND_ISR_HZ ( 16000000.0 / 281.0 )
 #define MAX_SOUND_CHANNELS 4
 #define GB_NUM_PITCH 36
 
@@ -1263,7 +1281,7 @@ void gbUpdateNoteChannel( int i )
     if( outputVolume > 9 ) outputVolume = 9;
     if( gbNotePitch[ i ] == 63 ) outputVolume = 0; // real hardware's own "rest" pitch sentinel
 
-    float freqHz = 15000.0 / ( 2.0 * (float)gbHalfPeriods[ outputPitch ] );
+    float freqHz = GB_SOUND_ISR_HZ / ( 2.0 * (float)gbHalfPeriods[ outputPitch ] );
 
     // Normalized 0..1, not real hardware's own literal 8-bit PWM duty
     // math (`(outputVolume*chanVolumes*stepVolume << globalVolume) / 128`)
@@ -1554,13 +1572,12 @@ void gbPlayNote( int pitch, int duration )
 // frames) after a leading 2-bit command-flag/reserved pair; a command word
 // (bit0 set) instead selects an instrument - 0 (square) for OK/Cancel, 1
 // (noise) for Tick - before the note(s) that follow it. Real audible
-// frequency = 15000 / (2 * halfPeriod), from Sound::generateOutput()'s own
-// documented real 15kHz ISR rate (it toggles the output every halfPeriod
-// ISR ticks, one full cycle every 2*halfPeriod ticks):
-//   OK:     pitch 14 (halfPeriod 110 -> 68.18Hz) then pitch 26 (halfPeriod
-//           55 -> 136.36Hz) - a rising 2-note blip.
+// frequency = GB_SOUND_ISR_HZ / (2*halfPeriod) - see that constant's own
+// doc comment above for the real ISR-rate derivation:
+//   OK:     pitch 14 (halfPeriod 110 -> 258.82Hz) then pitch 26
+//           (halfPeriod 55 -> 517.63Hz) - a rising 2-note blip.
 //   Cancel: the same two notes, reversed - a falling 2-note blip.
-//   Tick:   pitch 26 (136.36Hz) played through the real noise instrument -
+//   Tick:   pitch 26 (517.63Hz) played through the real noise instrument -
 //           a pseudorandom-amplitude buzz at that underlying rate, not a
 //           clean tone; this shim's own plain per-voice square-wave tone
 //           engine has no equivalent for real noise, so it plays as a
@@ -1573,23 +1590,23 @@ void gbPlayNote( int pitch, int duration )
 // voice, one note at a time) - this shim's own genuinely multi-voice
 // md_playTone() instead starts both of OK/Cancel's two notes at once, so
 // each plays as a single short overlapping 2-note chord (a rising/falling
-// octave dyad, since 136.36/68.18 = 2.0 exactly) rather than a true
+// octave dyad, since 517.63/258.82 = 2.0 exactly) rather than a true
 // two-step melody.
 void gbPlayTick()
 {
-    md_playTone( 136.36, 1.0 / (float)gbFrameRateFps );
+    md_playTone( 517.63, 1.0 / (float)gbFrameRateFps );
 }
 
 void gbPlayOK()
 {
-    md_playTone( 68.18, 1.0 / (float)gbFrameRateFps );
-    md_playTone( 136.36, 1.0 / (float)gbFrameRateFps );
+    md_playTone( 258.82, 1.0 / (float)gbFrameRateFps );
+    md_playTone( 517.63, 1.0 / (float)gbFrameRateFps );
 }
 
 void gbPlayCancel()
 {
-    md_playTone( 136.36, 1.0 / (float)gbFrameRateFps );
-    md_playTone( 68.18, 1.0 / (float)gbFrameRateFps );
+    md_playTone( 517.63, 1.0 / (float)gbFrameRateFps );
+    md_playTone( 258.82, 1.0 / (float)gbFrameRateFps );
 }
 
 // -----------------------------------------------------------------------------
